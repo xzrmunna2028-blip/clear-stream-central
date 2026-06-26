@@ -20,6 +20,8 @@ export type PublicMatch = {
   is_live: boolean;
 };
 
+export type PublicSource = { id: string; label: string };
+
 export const listChannels = createServerFn({ method: "GET" }).handler(
   async (): Promise<PublicChannel[]> => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -44,3 +46,19 @@ export const listMatches = createServerFn({ method: "GET" }).handler(
     return (data ?? []) as PublicMatch[];
   },
 );
+
+import { z } from "zod";
+
+export const listChannelSources = createServerFn({ method: "GET" })
+  .inputValidator((d: unknown) => z.object({ channelId: z.string().uuid() }).parse(d))
+  .handler(async ({ data }): Promise<PublicSource[]> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rows, error } = await supabaseAdmin
+      .from("channel_sources")
+      .select("id,label")
+      .eq("channel_id", data.channelId)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+    if (error) throw new Error(error.message);
+    return (rows ?? []) as PublicSource[];
+  });

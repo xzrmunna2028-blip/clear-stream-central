@@ -5,7 +5,14 @@ import logo from "@/assets/logo.png";
 import { Player } from "@/components/Player";
 import { ChannelGrid } from "@/components/ChannelGrid";
 import { MatchSchedule } from "@/components/MatchSchedule";
-import { listChannels, listMatches, type PublicChannel, type PublicMatch } from "@/lib/channels.functions";
+import {
+  listChannels,
+  listMatches,
+  listChannelSources,
+  type PublicChannel,
+  type PublicMatch,
+  type PublicSource,
+} from "@/lib/channels.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -35,10 +42,22 @@ function Home() {
   const { channels: initChannels, matches: initMatches } = Route.useLoaderData();
   const refetchCh = useServerFn(listChannels);
   const refetchMa = useServerFn(listMatches);
+  const fetchSources = useServerFn(listChannelSources);
 
   const [channels, setChannels] = useState<PublicChannel[]>(initChannels);
   const [matches, setMatches] = useState<PublicMatch[]>(initMatches);
   const [active, setActive] = useState<PublicChannel | null>(initChannels[0] ?? null);
+  const [sources, setSources] = useState<PublicSource[]>([]);
+
+  // Load sources whenever active channel changes
+  useEffect(() => {
+    if (!active?.id) { setSources([]); return; }
+    let cancelled = false;
+    fetchSources({ data: { channelId: active.id } })
+      .then((r) => { if (!cancelled) setSources(r); })
+      .catch(() => { if (!cancelled) setSources([]); });
+    return () => { cancelled = true; };
+  }, [active?.id, fetchSources]);
 
   // Soft poll for real-time updates from admin
   useEffect(() => {
@@ -77,7 +96,7 @@ function Home() {
       <h1 className="sr-only">FlashSports HD — Live Television Streaming</h1>
 
       <div className="mb-4">
-        <Player channelId={active?.id ?? null} channelName={active?.name ?? ""} />
+        <Player channelId={active?.id ?? null} channelName={active?.name ?? ""} sources={sources} />
       </div>
 
       <MatchSchedule
@@ -98,3 +117,4 @@ function Home() {
     </div>
   );
 }
+

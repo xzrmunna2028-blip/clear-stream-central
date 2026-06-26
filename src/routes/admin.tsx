@@ -11,7 +11,11 @@ import {
   adminListMatches,
   adminSaveMatch,
   adminDeleteMatch,
+  adminListSources,
+  adminSaveSource,
+  adminDeleteSource,
   type AdminChannel,
+  type AdminSource,
 } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/admin")({
@@ -148,6 +152,7 @@ function ChannelsTab() {
   const del = useServerFn(adminDeleteChannel);
   const [items, setItems] = useState<AdminChannel[]>([]);
   const [editing, setEditing] = useState<Partial<AdminChannel> | null>(null);
+  const [sourcesFor, setSourcesFor] = useState<AdminChannel | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -221,6 +226,13 @@ function ChannelsTab() {
                 <td className="px-3 py-2 text-xs">{c.is_active ? "✅" : "—"}</td>
                 <td className="px-3 py-2 text-right">
                   <button
+                    onClick={() => setSourcesFor(c)}
+                    className="mr-1 rounded border border-[var(--brand)]/40 px-2 py-1 text-xs text-[var(--brand)] hover:bg-[var(--brand)]/10"
+                    title="Manage SP-1, SP-2, Server 1..."
+                  >
+                    Sources
+                  </button>
+                  <button
                     onClick={() => setEditing(c)}
                     className="mr-1 rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface)]"
                   >
@@ -254,6 +266,168 @@ function ChannelsTab() {
           }}
         />
       )}
+
+      {sourcesFor && (
+        <SourcesModal channel={sourcesFor} onClose={() => setSourcesFor(null)} />
+      )}
+    </div>
+  );
+}
+
+function SourcesModal({ channel, onClose }: { channel: AdminChannel; onClose: () => void }) {
+  const list = useServerFn(adminListSources);
+  const save = useServerFn(adminSaveSource);
+  const del = useServerFn(adminDeleteSource);
+  const [items, setItems] = useState<AdminSource[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<Partial<AdminSource> | null>(null);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const r = await list({ data: { channel_id: channel.id } });
+    setItems(r);
+    setLoading(false);
+  }, [list, channel.id]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
+      <div className="w-full max-w-2xl rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <div className="text-base font-semibold">Stream Sources — {channel.name}</div>
+            <div className="text-xs text-[var(--muted-foreground)]">
+              Add unlimited servers (SP-1, SP-2, Server 1...) — viewers can switch inside the player.
+            </div>
+          </div>
+          <button
+            onClick={() => setEditing({
+              channel_id: channel.id,
+              label: `SP-${items.length + 1}`,
+              stream_url: "",
+              sort_order: items.length,
+              is_active: true,
+            })}
+            className="brand-gradient rounded-md px-3 py-1.5 text-sm font-semibold text-black"
+          >
+            + Add Source
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="py-6 text-center text-sm text-[var(--muted-foreground)]">Loading…</div>
+        ) : items.length === 0 ? (
+          <div className="rounded-md border border-dashed border-[var(--border)] py-6 text-center text-sm text-[var(--muted-foreground)]">
+            No sources yet. Add SP-1, SP-2, Server 1 etc.
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-[var(--border)]">
+            <table className="w-full text-sm">
+              <thead className="bg-[var(--surface-elevated)] text-xs uppercase text-[var(--muted-foreground)]">
+                <tr>
+                  <th className="px-3 py-2 text-left">#</th>
+                  <th className="px-3 py-2 text-left">Label</th>
+                  <th className="px-3 py-2 text-left">Stream URL</th>
+                  <th className="px-3 py-2 text-left">Active</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((s) => (
+                  <tr key={s.id} className="border-t border-[var(--border)]">
+                    <td className="px-3 py-2 text-xs text-[var(--muted-foreground)]">{s.sort_order}</td>
+                    <td className="px-3 py-2 font-semibold">{s.label}</td>
+                    <td className="px-3 py-2">
+                      <code className="block max-w-[300px] truncate rounded bg-[var(--surface-elevated)] px-2 py-1 text-[11px] text-[var(--muted-foreground)]">
+                        {s.stream_url}
+                      </code>
+                    </td>
+                    <td className="px-3 py-2 text-xs">{s.is_active ? "✅" : "—"}</td>
+                    <td className="px-3 py-2 text-right">
+                      <button onClick={() => setEditing(s)} className="mr-1 rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-elevated)]">Edit</button>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`Delete ${s.label}?`)) return;
+                          await del({ data: { id: s.id } });
+                          refresh();
+                        }}
+                        className="rounded bg-[var(--destructive)] px-2 py-1 text-xs text-white"
+                      >Del</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="mt-4 flex justify-end">
+          <button onClick={onClose} className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm">Close</button>
+        </div>
+
+        {editing && (
+          <SourceEditor
+            initial={editing}
+            onClose={() => setEditing(null)}
+            onSave={async (data) => {
+              await save({ data });
+              setEditing(null);
+              refresh();
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SourceEditor({
+  initial, onClose, onSave,
+}: { initial: Partial<AdminSource>; onClose: () => void; onSave: (d: any) => Promise<void> }) {
+  const [f, setF] = useState({
+    id: initial.id,
+    channel_id: initial.channel_id!,
+    label: initial.label ?? "",
+    stream_url: initial.stream_url ?? "",
+    sort_order: initial.sort_order ?? 0,
+    is_active: initial.is_active ?? true,
+  });
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center bg-black/70 p-4">
+      <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+        <div className="mb-3 text-base font-semibold">{f.id ? "Edit Source" : "Add Source"}</div>
+        <div className="space-y-3">
+          <Field label="Label (SP-1, SP-2, Server 1, etc.)">
+            <input className={inp} value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })} />
+          </Field>
+          <Field label="Stream URL (m3u8)">
+            <input className={inp} value={f.stream_url} onChange={(e) => setF({ ...f, stream_url: e.target.value })} />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Sort Order">
+              <input type="number" className={inp} value={f.sort_order}
+                onChange={(e) => setF({ ...f, sort_order: Number(e.target.value) || 0 })} />
+            </Field>
+            <label className="mt-6 flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={f.is_active} onChange={(e) => setF({ ...f, is_active: e.target.checked })} />
+              Active
+            </label>
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm">Cancel</button>
+          <button
+            disabled={busy || !f.label || !f.stream_url}
+            onClick={async () => {
+              setBusy(true);
+              try { await onSave(f); } finally { setBusy(false); }
+            }}
+            className="brand-gradient rounded-md px-4 py-1.5 text-sm font-semibold text-black disabled:opacity-60"
+          >{busy ? "Saving…" : "Save"}</button>
+        </div>
+      </div>
     </div>
   );
 }

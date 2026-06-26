@@ -1,37 +1,46 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
 import Hls, { type Level } from "hls.js";
+import type { PublicSource } from "@/lib/channels.functions";
 
 type Props = {
   channelId: string | null;
   channelName: string;
+  sources?: PublicSource[];
 };
 
 type Quality = { index: number; height: number; bitrate: number };
 
-export function Player({ channelId, channelName }: Props) {
+export function Player({ channelId, channelName, sources = [] }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
 
   const [qualities, setQualities] = useState<Quality[]>([]);
-  const [currentLevel, setCurrentLevel] = useState<number>(-1); // -1 = auto
+  const [currentLevel, setCurrentLevel] = useState<number>(-1);
   const [showSettings, setShowSettings] = useState(false);
   const [overlay, setOverlay] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [brightness, setBrightness] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [currentSourceId, setCurrentSourceId] = useState<string | null>(null);
+
+  // Reset source selection when channel changes
+  useEffect(() => {
+    setCurrentSourceId(sources[0]?.id ?? null);
+  }, [channelId, sources]);
 
   const showOverlay = useCallback((text: string) => {
     setOverlay(text);
     window.setTimeout(() => setOverlay((cur) => (cur === text ? null : cur)), 900);
   }, []);
 
-  // Load stream
+  // Load stream — depends on channelId AND selected source
   useEffect(() => {
     if (!channelId || !videoRef.current) return;
     const video = videoRef.current;
-    const src = `/api/stream/${channelId}/playlist.m3u8`;
+    const qs = currentSourceId ? `?source=${currentSourceId}` : "";
+    const src = `/api/stream/${channelId}/playlist.m3u8${qs}`;
     setLoading(true);
     setQualities([]);
     setCurrentLevel(-1);
@@ -43,8 +52,6 @@ export function Player({ channelId, channelName }: Props) {
 
     if (Hls.isSupported()) {
       const hls = new Hls({
-        // Instant-start tuning: fetch the lowest level first so playback begins
-        // immediately, then ABR climbs to the best quality the network allows.
         startLevel: -1,
         autoStartLoad: true,
         lowLatencyMode: false,
@@ -104,9 +111,9 @@ export function Player({ channelId, channelName }: Props) {
         hlsRef.current = null;
       }
     };
-  }, [channelId]);
+  }, [channelId, currentSourceId]);
 
-  // Gesture handlers — vertical drag on right half = volume, left half = brightness
+  // Gesture handlers
   useEffect(() => {
     const el = containerRef.current;
     const video = videoRef.current;
@@ -165,7 +172,17 @@ export function Player({ channelId, channelName }: Props) {
   }, [brightness, showOverlay]);
 
   useEffect(() => {
-    const onFs = () => setIsFullscreen(!!document.fullscreenElement);
+    const onFs = () => {
+      const fs = !!document.fullscreenElement;
+      setIsFullscreen(fs);
+      // Auto-rotate to landscape on mobile when entering fullscreen
+      const so: any = (screen as any).orientation;
+      if (fs && so?.lock) {
+        so.lock("landscape").catch(() => {});
+      } else if (!fs && so?.unlock) {
+        try { so.unlock(); } catch {}
+      }
+    };
     document.addEventListener("fullscreenchange", onFs);
     return () => document.removeEventListener("fullscreenchange", onFs);
   }, []);
@@ -174,8 +191,29 @@ export function Player({ channelId, channelName }: Props) {
     const el = containerRef.current;
     if (!el) return;
     if (document.fullscreenElement) document.exitFullscreen();
-    else el.requestFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
   }, []);
+
+  const rotateScreen = useCallback(async () => {
+    // Enter fullscreen if needed; lock to landscape (or unlock to portrait if already landscape)
+    const el = containerRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      try { await el.requestFullscreen?.(); } catch {}
+    }
+    const so: any = (screen as any).orientation;
+    if (!so?.lock) {
+      showOverlay("Rotate not supported");
+      return;
+    }
+    const isLandscape = so.type?.startsWith("landscape");
+    try {
+      await so.lock(isLandscape ? "portrait" : "landscape");
+      showOverlay(isLandscape ? "↻ Portrait" : "↻ Landscape");
+    } catch {
+      showOverlay("Rotate blocked");
+    }
+  }, [showOverlay]);
 
   const togglePlay = useCallback(() => {
     const v = videoRef.current;
@@ -204,8 +242,6 @@ export function Player({ channelId, channelName }: Props) {
 
   const qBadge = (h: number) => {
     if (h >= 2160) return { label: "4K", cls: "bg-red-600 text-white" };
-    if (h >= 1440) return { label: "HD", cls: "bg-red-500 text-white" };
-    if (h >= 1080) return { label: "HD", cls: "bg-red-500 text-white" };
     if (h >= 720) return { label: "HD", cls: "bg-red-500 text-white" };
     return null;
   };
@@ -235,6 +271,32 @@ export function Player({ channelId, channelName }: Props) {
         </div>
       )}
 
+      {/* Source tabs (SP-1, SP-2, Server 1...) — pill row near top, only shown when 2+ sources */}
+      {sources.length > 1 && (
+        <div
+          data-no-gesture
+          className="absolute left-1/2 top-12 z-10 flex max-w-[90%] -translate-x-1/2 gap-2 overflow-x-auto rounded-full bg-black/55 px-2 py-1.5 backdrop-blur ring-1 ring-white/10"
+          style={{ scrollbarWidth: "none" }}
+        >
+          {sources.map((s) => {
+            const active = currentSourceId === s.id;
+            return (
+              <button
+                key={s.id}
+                onClick={() => setCurrentSourceId(s.id)}
+                className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  active
+                    ? "bg-[var(--brand)] text-black"
+                    : "bg-white/10 text-white hover:bg-white/20"
+                }`}
+              >
+                {active && "✓ "}{s.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {loading && (
         <div className="pointer-events-none absolute inset-0 grid place-items-center">
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-white" />
@@ -246,6 +308,20 @@ export function Player({ channelId, channelName }: Props) {
           {overlay}
         </div>
       )}
+
+      <div data-no-gesture className="absolute right-3 top-3 flex items-center gap-2">
+        <button
+          onClick={rotateScreen}
+          className="rounded-md bg-black/60 px-2 py-2 text-white backdrop-blur hover:bg-black/80"
+          aria-label="Rotate"
+          title="Rotate"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
+            <path d="M21 3v5h-5" />
+          </svg>
+        </button>
+      </div>
 
       <div data-no-gesture className="absolute right-3 bottom-3 flex items-center gap-2">
         <button
