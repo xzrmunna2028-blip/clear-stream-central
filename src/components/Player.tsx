@@ -106,10 +106,18 @@ export function Player({ channelId, channelName, sources = [] }: Props) {
     }
 
     return () => {
+      // Aggressive teardown — prevents lingering audio when switching channels/sources
+      try { video.pause(); } catch {}
+      try { video.muted = true; } catch {}
       if (hlsRef.current) {
-        hlsRef.current.destroy();
+        try { hlsRef.current.detachMedia(); } catch {}
+        try { hlsRef.current.destroy(); } catch {}
         hlsRef.current = null;
       }
+      try {
+        video.removeAttribute("src");
+        video.load();
+      } catch {}
     };
   }, [channelId, currentSourceId]);
 
