@@ -10,33 +10,53 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiStreamProxyRouteImport } from './routes/api/stream/proxy'
+import { Route as ApiStreamIdDotm3u8RouteImport } from './routes/api/stream/$id[.]m3u8'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiStreamProxyRoute = ApiStreamProxyRouteImport.update({
+  id: '/api/stream/proxy',
+  path: '/api/stream/proxy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiStreamIdDotm3u8Route = ApiStreamIdDotm3u8RouteImport.update({
+  id: '/api/stream/$id.m3u8',
+  path: '/api/stream/$id.m3u8',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/stream/$id.m3u8': typeof ApiStreamIdDotm3u8Route
+  '/api/stream/proxy': typeof ApiStreamProxyRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/stream/$id.m3u8': typeof ApiStreamIdDotm3u8Route
+  '/api/stream/proxy': typeof ApiStreamProxyRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/stream/$id.m3u8': typeof ApiStreamIdDotm3u8Route
+  '/api/stream/proxy': typeof ApiStreamProxyRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/api/stream/$id.m3u8' | '/api/stream/proxy'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/api/stream/$id.m3u8' | '/api/stream/proxy'
+  id: '__root__' | '/' | '/api/stream/$id.m3u8' | '/api/stream/proxy'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiStreamIdDotm3u8Route: typeof ApiStreamIdDotm3u8Route
+  ApiStreamProxyRoute: typeof ApiStreamProxyRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +68,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/stream/proxy': {
+      id: '/api/stream/proxy'
+      path: '/api/stream/proxy'
+      fullPath: '/api/stream/proxy'
+      preLoaderRoute: typeof ApiStreamProxyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/stream/$id.m3u8': {
+      id: '/api/stream/$id.m3u8'
+      path: '/api/stream/$id.m3u8'
+      fullPath: '/api/stream/$id.m3u8'
+      preLoaderRoute: typeof ApiStreamIdDotm3u8RouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiStreamIdDotm3u8Route: ApiStreamIdDotm3u8Route,
+  ApiStreamProxyRoute: ApiStreamProxyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
