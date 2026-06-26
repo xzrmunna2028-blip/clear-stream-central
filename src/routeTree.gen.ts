@@ -9,38 +9,85 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiStreamProxyRouteImport } from './routes/api/stream/proxy'
+import { Route as ApiStreamIdPlaylistDotm3u8RouteImport } from './routes/api/stream/$id/playlist[.]m3u8'
 
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiStreamProxyRoute = ApiStreamProxyRouteImport.update({
+  id: '/api/stream/proxy',
+  path: '/api/stream/proxy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiStreamIdPlaylistDotm3u8Route =
+  ApiStreamIdPlaylistDotm3u8RouteImport.update({
+    id: '/api/stream/$id/playlist.m3u8',
+    path: '/api/stream/$id/playlist.m3u8',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/api/stream/proxy': typeof ApiStreamProxyRoute
+  '/api/stream/$id/playlist.m3u8': typeof ApiStreamIdPlaylistDotm3u8Route
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/api/stream/proxy': typeof ApiStreamProxyRoute
+  '/api/stream/$id/playlist.m3u8': typeof ApiStreamIdPlaylistDotm3u8Route
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/api/stream/proxy': typeof ApiStreamProxyRoute
+  '/api/stream/$id/playlist.m3u8': typeof ApiStreamIdPlaylistDotm3u8Route
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/api/stream/proxy'
+    | '/api/stream/$id/playlist.m3u8'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/admin' | '/api/stream/proxy' | '/api/stream/$id/playlist.m3u8'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/api/stream/proxy'
+    | '/api/stream/$id/playlist.m3u8'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
+  ApiStreamProxyRoute: typeof ApiStreamProxyRoute
+  ApiStreamIdPlaylistDotm3u8Route: typeof ApiStreamIdPlaylistDotm3u8Route
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,22 +95,29 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/stream/proxy': {
+      id: '/api/stream/proxy'
+      path: '/api/stream/proxy'
+      fullPath: '/api/stream/proxy'
+      preLoaderRoute: typeof ApiStreamProxyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/stream/$id/playlist.m3u8': {
+      id: '/api/stream/$id/playlist.m3u8'
+      path: '/api/stream/$id/playlist.m3u8'
+      fullPath: '/api/stream/$id/playlist.m3u8'
+      preLoaderRoute: typeof ApiStreamIdPlaylistDotm3u8RouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
+  ApiStreamProxyRoute: ApiStreamProxyRoute,
+  ApiStreamIdPlaylistDotm3u8Route: ApiStreamIdPlaylistDotm3u8Route,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
