@@ -14,7 +14,7 @@ export function getSessionConfig() {
     maxAge: 60 * 60 * 24 * 7,
     cookie: {
       httpOnly: true,
-      secure: true,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax" as const,
       path: "/",
     },
