@@ -43,11 +43,20 @@ export function Player({ channelId, channelName }: Props) {
 
     if (Hls.isSupported()) {
       const hls = new Hls({
-        lowLatencyMode: true,
-        backBufferLength: 30,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
+        // Instant-start tuning: fetch the lowest level first so playback begins
+        // immediately, then ABR climbs to the best quality the network allows.
+        startLevel: -1,
+        autoStartLoad: true,
+        lowLatencyMode: false,
+        backBufferLength: 15,
+        maxBufferLength: 20,
+        maxMaxBufferLength: 40,
+        maxBufferSize: 30 * 1000 * 1000,
+        manifestLoadingMaxRetry: 4,
+        levelLoadingMaxRetry: 4,
+        fragLoadingMaxRetry: 6,
         enableWorker: true,
+        progressive: true,
       });
       hlsRef.current = hls;
       hls.loadSource(src);
@@ -65,11 +74,13 @@ export function Player({ channelId, channelName }: Props) {
       hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => {
         setCurrentLevel(hls.autoLevelEnabled ? -1 : data.level);
       });
+      let netRetries = 0;
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              hls.startLoad();
+              if (netRetries++ < 3) hls.startLoad();
+              else hls.destroy();
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
               hls.recoverMediaError();
