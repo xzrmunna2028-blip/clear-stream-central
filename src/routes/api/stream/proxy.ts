@@ -40,7 +40,7 @@ export const Route = createFileRoute("/api/stream/proxy")({
 
         if (isManifest) {
           const text = await upstream.text();
-          const { rewriteManifest } = await import("./$id[.]m3u8");
+          const { rewriteManifest } = await import("./$id/playlist[.]m3u8");
           const rewritten = rewriteManifest(text, target, encodeUrl);
           return new Response(rewritten, {
             status: 200,

@@ -3,7 +3,7 @@
 // upstream URL never reaches the client.
 import { createFileRoute } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/api/stream/$id.m3u8")({
+export const Route = createFileRoute("/api/stream/$id/playlist.m3u8")({
   server: {
     handlers: {
       GET: async ({ params }) => {

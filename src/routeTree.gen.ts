@@ -11,7 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiStreamProxyRouteImport } from './routes/api/stream/proxy'
-import { Route as ApiStreamIdDotm3u8RouteImport } from './routes/api/stream/$id[.]m3u8'
+import { Route as ApiStreamIdPlaylistDotm3u8RouteImport } from './routes/api/stream/$id/playlist[.]m3u8'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -23,40 +23,41 @@ const ApiStreamProxyRoute = ApiStreamProxyRouteImport.update({
   path: '/api/stream/proxy',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiStreamIdDotm3u8Route = ApiStreamIdDotm3u8RouteImport.update({
-  id: '/api/stream/$id.m3u8',
-  path: '/api/stream/$id.m3u8',
-  getParentRoute: () => rootRouteImport,
-} as any)
+const ApiStreamIdPlaylistDotm3u8Route =
+  ApiStreamIdPlaylistDotm3u8RouteImport.update({
+    id: '/api/stream/$id/playlist.m3u8',
+    path: '/api/stream/$id/playlist.m3u8',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/api/stream/$id.m3u8': typeof ApiStreamIdDotm3u8Route
   '/api/stream/proxy': typeof ApiStreamProxyRoute
+  '/api/stream/$id/playlist.m3u8': typeof ApiStreamIdPlaylistDotm3u8Route
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/api/stream/$id.m3u8': typeof ApiStreamIdDotm3u8Route
   '/api/stream/proxy': typeof ApiStreamProxyRoute
+  '/api/stream/$id/playlist.m3u8': typeof ApiStreamIdPlaylistDotm3u8Route
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/api/stream/$id.m3u8': typeof ApiStreamIdDotm3u8Route
   '/api/stream/proxy': typeof ApiStreamProxyRoute
+  '/api/stream/$id/playlist.m3u8': typeof ApiStreamIdPlaylistDotm3u8Route
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/stream/$id.m3u8' | '/api/stream/proxy'
+  fullPaths: '/' | '/api/stream/proxy' | '/api/stream/$id/playlist.m3u8'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/stream/$id.m3u8' | '/api/stream/proxy'
-  id: '__root__' | '/' | '/api/stream/$id.m3u8' | '/api/stream/proxy'
+  to: '/' | '/api/stream/proxy' | '/api/stream/$id/playlist.m3u8'
+  id: '__root__' | '/' | '/api/stream/proxy' | '/api/stream/$id/playlist.m3u8'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ApiStreamIdDotm3u8Route: typeof ApiStreamIdDotm3u8Route
   ApiStreamProxyRoute: typeof ApiStreamProxyRoute
+  ApiStreamIdPlaylistDotm3u8Route: typeof ApiStreamIdPlaylistDotm3u8Route
 }
 
 declare module '@tanstack/react-router' {
@@ -75,11 +76,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiStreamProxyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/stream/$id.m3u8': {
-      id: '/api/stream/$id.m3u8'
-      path: '/api/stream/$id.m3u8'
-      fullPath: '/api/stream/$id.m3u8'
-      preLoaderRoute: typeof ApiStreamIdDotm3u8RouteImport
+    '/api/stream/$id/playlist.m3u8': {
+      id: '/api/stream/$id/playlist.m3u8'
+      path: '/api/stream/$id/playlist.m3u8'
+      fullPath: '/api/stream/$id/playlist.m3u8'
+      preLoaderRoute: typeof ApiStreamIdPlaylistDotm3u8RouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -87,8 +88,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ApiStreamIdDotm3u8Route: ApiStreamIdDotm3u8Route,
   ApiStreamProxyRoute: ApiStreamProxyRoute,
+  ApiStreamIdPlaylistDotm3u8Route: ApiStreamIdPlaylistDotm3u8Route,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
