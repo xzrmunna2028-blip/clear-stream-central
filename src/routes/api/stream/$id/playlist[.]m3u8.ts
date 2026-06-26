@@ -22,7 +22,7 @@ export const Route = createFileRoute("/api/stream/$id/playlist.m3u8")({
         const upstream = data.stream_url;
         try {
           let usedFallback = false;
-          let res = await tryFetchPlaylist(upstream);
+          let res = await tryFetchPlaylist(upstream, 1, 3000);
           if (!res) {
             const fallback = await fetchFallbackPlaylist(
               supabaseAdmin,
@@ -63,7 +63,7 @@ function upstreamErrorResponse() {
   });
 }
 
-async function tryFetchPlaylist(url: string, attempts = 3, timeoutMs = 8000): Promise<Response | null> {
+async function tryFetchPlaylist(url: string, attempts = 1, timeoutMs = 3000): Promise<Response | null> {
   try {
     const res = await fetchUpstream(url, attempts, timeoutMs);
     return res.ok ? res : null;
