@@ -17,6 +17,7 @@ import {
   type AdminChannel,
   type AdminSource,
 } from "@/lib/admin.functions";
+import { getSiteSettings, adminUpdateSiteSettings } from "@/lib/site-settings.functions";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -98,7 +99,7 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
-type Tab = "channels" | "matches";
+type Tab = "channels" | "matches" | "settings";
 
 function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>("channels");
@@ -128,7 +129,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
       </header>
 
       <div className="mb-4 inline-flex rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1">
-        {(["channels", "matches"] as Tab[]).map((t) => (
+        {(["channels", "matches", "settings"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -141,8 +142,89 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         ))}
       </div>
 
-      {tab === "channels" ? <ChannelsTab /> : <MatchesTab />}
+      {tab === "channels" ? <ChannelsTab /> : tab === "matches" ? <MatchesTab /> : <SettingsTab />}
     </div>
+  );
+}
+
+function SettingsTab() {
+  const get = useServerFn(getSiteSettings);
+  const save = useServerFn(adminUpdateSiteSettings);
+  const [on, setOn] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    get().then((s) => {
+      setOn(s.maintenance_mode);
+      setMsg(s.maintenance_message);
+      setLoaded(true);
+    });
+  }, [get]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setSaved(false);
+    try {
+      const s = await save({ data: { maintenance_mode: on, maintenance_message: msg } });
+      setOn(s.maintenance_mode);
+      setMsg(s.maintenance_message);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!loaded) return <div className="text-sm text-[var(--muted-foreground)]">Loading…</div>;
+
+  return (
+    <form onSubmit={submit} className="max-w-xl rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+      <div className="mb-4">
+        <div className="text-base font-bold">Site Maintenance Mode</div>
+        <div className="mt-1 text-xs text-[var(--muted-foreground)]">
+          When ON, visitors see a full-screen overlay with the logo and scrolling status message. Admin panel stays accessible.
+        </div>
+      </div>
+
+      <label className="mb-4 flex cursor-pointer items-center justify-between rounded-lg border border-[var(--border)] bg-black/20 p-3">
+        <div>
+          <div className="text-sm font-semibold">Show maintenance overlay</div>
+          <div className="text-xs text-[var(--muted-foreground)]">Visitors will see "Update in progress"</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOn((v) => !v)}
+          className={`relative h-7 w-12 rounded-full transition ${on ? "bg-[var(--brand)]" : "bg-white/15"}`}
+          aria-pressed={on}
+        >
+          <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition ${on ? "left-[22px]" : "left-0.5"}`} />
+        </button>
+      </label>
+
+      <label className="mb-1 block text-xs text-[var(--muted-foreground)]">Status message (scrolls under the logo)</label>
+      <input
+        value={msg}
+        onChange={(e) => setMsg(e.target.value)}
+        maxLength={300}
+        placeholder="Updating channels…"
+        className="mb-4 w-full rounded-md border border-[var(--border)] bg-black/30 px-3 py-2 text-sm outline-none focus:border-[var(--brand)]"
+      />
+
+      <div className="flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={busy}
+          className="rounded-md brand-gradient px-4 py-2 text-sm font-semibold text-black disabled:opacity-60"
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+        {saved && <span className="text-xs font-medium text-emerald-400">✓ Saved</span>}
+      </div>
+    </form>
   );
 }
 
