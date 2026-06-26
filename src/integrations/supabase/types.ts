@@ -138,6 +138,27 @@ export type Database = {
           },
         ]
       }
+      site_settings: {
+        Row: {
+          id: boolean
+          maintenance_message: string
+          maintenance_mode: boolean
+          updated_at: string
+        }
+        Insert: {
+          id?: boolean
+          maintenance_message?: string
+          maintenance_mode?: boolean
+          updated_at?: string
+        }
+        Update: {
+          id?: boolean
+          maintenance_message?: string
+          maintenance_mode?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
