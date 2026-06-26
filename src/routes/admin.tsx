@@ -152,6 +152,7 @@ function ChannelsTab() {
   const del = useServerFn(adminDeleteChannel);
   const [items, setItems] = useState<AdminChannel[]>([]);
   const [editing, setEditing] = useState<Partial<AdminChannel> | null>(null);
+  const [sourcesFor, setSourcesFor] = useState<AdminChannel | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
