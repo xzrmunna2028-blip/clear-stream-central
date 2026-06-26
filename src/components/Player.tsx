@@ -43,11 +43,20 @@ export function Player({ channelId, channelName }: Props) {
 
     if (Hls.isSupported()) {
       const hls = new Hls({
-        lowLatencyMode: true,
-        backBufferLength: 30,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
+        // Instant-start tuning: fetch the lowest level first so playback begins
+        // immediately, then ABR climbs to the best quality the network allows.
+        startLevel: -1,
+        autoStartLoad: true,
+        lowLatencyMode: false,
+        backBufferLength: 15,
+        maxBufferLength: 20,
+        maxMaxBufferLength: 40,
+        maxBufferSize: 30 * 1000 * 1000,
+        manifestLoadingMaxRetry: 4,
+        levelLoadingMaxRetry: 4,
+        fragLoadingMaxRetry: 6,
         enableWorker: true,
+        progressive: true,
       });
       hlsRef.current = hls;
       hls.loadSource(src);
@@ -65,11 +74,13 @@ export function Player({ channelId, channelName }: Props) {
       hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => {
         setCurrentLevel(hls.autoLevelEnabled ? -1 : data.level);
       });
+      let netRetries = 0;
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              hls.startLoad();
+              if (netRetries++ < 3) hls.startLoad();
+              else hls.destroy();
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
               hls.recoverMediaError();
@@ -191,6 +202,14 @@ export function Player({ channelId, channelName }: Props) {
     return `${Math.round(bps / 1000)} kbps`;
   };
 
+  const qBadge = (h: number) => {
+    if (h >= 2160) return { label: "4K", cls: "bg-red-600 text-white" };
+    if (h >= 1440) return { label: "HD", cls: "bg-red-500 text-white" };
+    if (h >= 1080) return { label: "HD", cls: "bg-red-500 text-white" };
+    if (h >= 720) return { label: "HD", cls: "bg-red-500 text-white" };
+    return null;
+  };
+
   const sortedQ = [...qualities].sort((a, b) => b.height - a.height);
 
   return (
@@ -209,7 +228,6 @@ export function Player({ channelId, channelName }: Props) {
         className="absolute inset-0 h-full w-full bg-black"
       />
 
-      {/* Channel name strip (top-left) */}
       {channelName && (
         <div className="pointer-events-none absolute top-3 left-3 rounded-md bg-black/50 px-2 py-1 text-xs font-medium tracking-wide text-white backdrop-blur">
           <span className="mr-2 inline-block h-2 w-2 rounded-full bg-[var(--live)] live-pulse" />
@@ -217,25 +235,19 @@ export function Player({ channelId, channelName }: Props) {
         </div>
       )}
 
-      {/* Loading */}
       {loading && (
         <div className="pointer-events-none absolute inset-0 grid place-items-center">
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-white" />
         </div>
       )}
 
-      {/* Gesture overlay */}
       {overlay && (
         <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-lg bg-black/60 px-4 py-2 text-base font-semibold text-white backdrop-blur">
           {overlay}
         </div>
       )}
 
-      {/* Controls row (bottom) */}
-      <div
-        data-no-gesture
-        className="absolute right-3 bottom-3 flex items-center gap-2"
-      >
+      <div data-no-gesture className="absolute right-3 bottom-3 flex items-center gap-2">
         <button
           onClick={() => setShowSettings((s) => !s)}
           className="rounded-md bg-black/60 px-2 py-2 text-white backdrop-blur hover:bg-black/80"
@@ -265,36 +277,43 @@ export function Player({ channelId, channelName }: Props) {
         </button>
       </div>
 
-      {/* Settings panel */}
       {showSettings && (
         <div
           data-no-gesture
-          className="absolute right-3 bottom-16 w-64 rounded-lg bg-black/80 p-3 text-white shadow-xl backdrop-blur"
+          className="absolute right-3 bottom-16 w-72 rounded-xl bg-black/85 p-3 text-white shadow-2xl backdrop-blur ring-1 ring-white/10"
         >
-          <div className="mb-2 text-xs font-semibold text-white/70">Quality (Resolution)</div>
-          <div className="max-h-72 overflow-y-auto space-y-1">
+          <div className="mb-2 text-center text-sm font-semibold">Quality</div>
+          <div className="max-h-80 overflow-y-auto space-y-1">
+            {sortedQ.length === 0 && (
+              <div className="px-2 py-3 text-center text-xs text-white/50">Loading quality options…</div>
+            )}
+            {sortedQ.map((q) => {
+              const badge = qBadge(q.height);
+              const active = currentLevel === q.index;
+              return (
+                <button
+                  key={q.index}
+                  onClick={() => pickQuality(q.index)}
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${active ? "bg-white/15" : "hover:bg-white/10"}`}
+                >
+                  <span className="flex items-center gap-2 font-semibold">
+                    {q.height > 0 ? `${q.height}p` : "Unknown"}
+                    {badge && (
+                      <span className={`rounded px-1.5 py-[1px] text-[10px] font-bold ${badge.cls}`}>
+                        {badge.label}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-xs text-white/70">{fmtBitrate(q.bitrate)}</span>
+                </button>
+              );
+            })}
             <button
               onClick={() => pickQuality(-1)}
-              className={`w-full rounded px-2 py-1.5 text-left text-sm ${currentLevel === -1 ? "bg-[var(--brand)] text-black" : "hover:bg-white/10"}`}
+              className={`mt-1 flex w-full items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold ${currentLevel === -1 ? "bg-[var(--brand)] text-black" : "bg-white/10 hover:bg-white/15"}`}
             >
               Auto
             </button>
-            {sortedQ.length === 0 && (
-              <div className="px-2 py-3 text-xs text-white/50">Loading quality options…</div>
-            )}
-            {sortedQ.map((q) => (
-              <button
-                key={q.index}
-                onClick={() => pickQuality(q.index)}
-                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm ${currentLevel === q.index ? "bg-[var(--brand)] text-black" : "hover:bg-white/10"}`}
-              >
-                <span>{q.height > 0 ? `${q.height}p` : "Unknown"}</span>
-                <span className="text-xs opacity-70">{fmtBitrate(q.bitrate)}</span>
-              </button>
-            ))}
-          </div>
-          <div className="mt-2 text-[10px] text-white/40">
-            Tip: ডান-উপরে টান দিলে সাউন্ড বাড়বে, বাম-উপরে টান দিলে ব্রাইটনেস। নিচে টান কমাবে।
           </div>
         </div>
       )}
