@@ -226,6 +226,13 @@ function ChannelsTab() {
                 <td className="px-3 py-2 text-xs">{c.is_active ? "✅" : "—"}</td>
                 <td className="px-3 py-2 text-right">
                   <button
+                    onClick={() => setSourcesFor(c)}
+                    className="mr-1 rounded border border-[var(--brand)]/40 px-2 py-1 text-xs text-[var(--brand)] hover:bg-[var(--brand)]/10"
+                    title="Manage SP-1, SP-2, Server 1..."
+                  >
+                    Sources
+                  </button>
+                  <button
                     onClick={() => setEditing(c)}
                     className="mr-1 rounded border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface)]"
                   >
