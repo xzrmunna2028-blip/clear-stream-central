@@ -12,7 +12,7 @@ export const Route = createFileRoute("/api/stream/$id/playlist.m3u8")({
 
         const { data, error } = await supabaseAdmin
           .from("channels")
-          .select("stream_url,is_active")
+          .select("stream_url,is_active,category")
           .eq("id", params.id)
           .maybeSingle();
         if (error || !data || !data.is_active) {
@@ -21,12 +21,18 @@ export const Route = createFileRoute("/api/stream/$id/playlist.m3u8")({
 
         const upstream = data.stream_url;
         try {
-          const res = await fetchUpstream(upstream);
-          if (!res.ok) {
-            return new Response("Upstream error", {
-              status: 502,
-              headers: { "access-control-allow-origin": "*" },
-            });
+          let usedFallback = false;
+          let res = await tryFetchPlaylist(upstream, 1, 3000);
+          if (!res) {
+            const fallback = await fetchFallbackPlaylist(
+              supabaseAdmin,
+              params.id,
+              data.category ?? null,
+              upstream,
+            );
+            if (!fallback) return upstreamErrorResponse();
+            res = fallback.res;
+            usedFallback = true;
           }
           const text = await res.text();
           // Use final (post-redirect) URL as base so relative segment URIs resolve correctly.
@@ -38,26 +44,82 @@ export const Route = createFileRoute("/api/stream/$id/playlist.m3u8")({
               "content-type": "application/vnd.apple.mpegurl",
               "cache-control": "no-store",
               "access-control-allow-origin": "*",
+              "x-stream-fallback": usedFallback ? "1" : "0",
             },
           });
         } catch (e) {
-          console.error("playlist fetch failed", e);
-          return new Response("Upstream error", {
-            status: 502,
-            headers: { "access-control-allow-origin": "*" },
-          });
+          console.error("playlist route failed", e);
+          return upstreamErrorResponse();
         }
       },
     },
   },
 });
 
-async function fetchUpstream(url: string, attempts = 3): Promise<Response> {
+function upstreamErrorResponse() {
+  return new Response("Upstream stream is unavailable", {
+    status: 502,
+    headers: { "access-control-allow-origin": "*" },
+  });
+}
+
+async function tryFetchPlaylist(url: string, attempts = 1, timeoutMs = 3000): Promise<Response | null> {
+  try {
+    const res = await fetchUpstream(url, attempts, timeoutMs);
+    return res.ok ? res : null;
+  } catch (error) {
+    console.warn("playlist upstream unavailable", error);
+    return null;
+  }
+}
+
+async function fetchFallbackPlaylist(
+  supabaseAdmin: any,
+  currentId: string,
+  category: string | null,
+  originalUrl: string,
+): Promise<{ res: Response; sourceUrl: string } | null> {
+  let query = supabaseAdmin
+    .from("channels")
+    .select("id,stream_url")
+    .eq("is_active", true)
+    .neq("id", currentId)
+    .order("sort_order", { ascending: true })
+    .limit(10);
+
+  if (category) query = query.eq("category", category);
+
+  const { data, error } = await query;
+  if (error) {
+    console.warn("fallback stream lookup failed", error.message);
+    return null;
+  }
+
+  const candidates = (data ?? [])
+    .map((row: { stream_url?: string | null }) => row.stream_url)
+    .filter((url: string | null | undefined): url is string => !!url && url !== originalUrl);
+
+  if (candidates.length === 0) return null;
+
+  try {
+    return await Promise.any(
+      candidates.map(async (sourceUrl: string) => {
+        const res = await tryFetchPlaylist(sourceUrl, 1, 3500);
+        if (!res) throw new Error("fallback unavailable");
+        return { res, sourceUrl };
+      }),
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function fetchUpstream(url: string, attempts = 3, timeoutMs = 8000): Promise<Response> {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 8000);
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
       const res = await fetch(url, {
         headers: {
           "user-agent":

@@ -22,6 +22,8 @@ export const Route = createFileRoute("/api/stream/proxy")({
 
         if (isManifest) {
           // Fetch + rewrite nested manifests.
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 8000);
           const upstream = await fetch(target, {
             headers: {
               "user-agent":
@@ -29,13 +31,14 @@ export const Route = createFileRoute("/api/stream/proxy")({
               accept: "*/*",
             },
             redirect: "follow",
-          });
+            signal: ctrl.signal,
+          }).finally(() => clearTimeout(timer));
           if (!upstream.ok) {
             return new Response("Upstream error: " + upstream.status, { status: 502 });
           }
           const text = await upstream.text();
           const { rewriteManifest } = await import("./$id/playlist[.]m3u8");
-          const rewritten = rewriteManifest(text, target, encodeUrl);
+          const rewritten = rewriteManifest(text, upstream.url || target, encodeUrl);
           return new Response(rewritten, {
             status: 200,
             headers: {
