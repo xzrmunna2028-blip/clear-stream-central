@@ -81,10 +81,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "FlashSports HD — Live TV & Sports Streaming" },
       { name: "description", content: "Watch live sports, news and entertainment channels in HD on FlashSports HD." },
       { name: "theme-color", content: "#0f1a2e" },
-      { property: "og:title", content: "FlashSports HD" },
-      { property: "og:description", content: "Live TV & Sports Streaming in HD." },
+      { property: "og:title", content: "FlashSports HD — Live TV & Sports Streaming" },
+      { property: "og:description", content: "Watch live sports, news and entertainment channels in HD on FlashSports HD." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: "FlashSports HD — Live TV & Sports Streaming" },
+      { name: "twitter:description", content: "Watch live sports, news and entertainment channels in HD on FlashSports HD." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/b3523a1b-5941-480b-a6ca-097c523ec0b9" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/b3523a1b-5941-480b-a6ca-097c523ec0b9" },
     ],
     links: [
       {
