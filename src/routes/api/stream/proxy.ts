@@ -1,6 +1,8 @@
-// Signed proxy for HLS segments and nested manifests. Verifies HMAC, fetches
-// the upstream resource, and streams it back. Nested manifests are recursively
-// rewritten so client-visible URLs only ever point at this proxy.
+// Signed proxy for HLS resources.
+// - Nested manifests (.m3u8) are fetched + rewritten so client never sees upstream URLs.
+// - Segments / keys / binary are served with a 302 redirect to the upstream URL.
+//   This avoids streaming every byte through the Worker, eliminating buffering
+//   and matching native CDN speed. The signed URL is one-shot per playback session.
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/api/stream/proxy")({
@@ -16,29 +18,21 @@ export const Route = createFileRoute("/api/stream/proxy")({
         const target = decodeUrl(u, s);
         if (!target) return new Response("Forbidden", { status: 403 });
 
-        const upstream = await fetch(target, {
-          headers: {
-            "user-agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36",
-            accept: "*/*",
-          },
-          redirect: "follow",
-        });
-
-        if (!upstream.ok) {
-          return new Response("Upstream error: " + upstream.status, {
-            status: 502,
-          });
-        }
-
-        const contentType =
-          upstream.headers.get("content-type")?.toLowerCase() ?? "";
-        const isManifest =
-          contentType.includes("mpegurl") ||
-          contentType.includes("application/x-mpegurl") ||
-          /\.m3u8(\?|$)/i.test(target);
+        const isManifest = /\.m3u8(\?|$)/i.test(target);
 
         if (isManifest) {
+          // Fetch + rewrite nested manifests.
+          const upstream = await fetch(target, {
+            headers: {
+              "user-agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36",
+              accept: "*/*",
+            },
+            redirect: "follow",
+          });
+          if (!upstream.ok) {
+            return new Response("Upstream error: " + upstream.status, { status: 502 });
+          }
           const text = await upstream.text();
           const { rewriteManifest } = await import("./$id/playlist[.]m3u8");
           const rewritten = rewriteManifest(text, target, encodeUrl);
@@ -52,16 +46,15 @@ export const Route = createFileRoute("/api/stream/proxy")({
           });
         }
 
-        // Segment / key / other binary: stream through.
-        const headers = new Headers();
-        const ct = upstream.headers.get("content-type");
-        if (ct) headers.set("content-type", ct);
-        const cl = upstream.headers.get("content-length");
-        if (cl) headers.set("content-length", cl);
-        headers.set("cache-control", "public, max-age=10");
-        headers.set("access-control-allow-origin", "*");
-
-        return new Response(upstream.body, { status: upstream.status, headers });
+        // Segment / key / binary: redirect to upstream so the CDN serves bytes directly.
+        return new Response(null, {
+          status: 302,
+          headers: {
+            location: target,
+            "cache-control": "no-store",
+            "access-control-allow-origin": "*",
+          },
+        });
       },
     },
   },
