@@ -6,9 +6,12 @@ import { createFileRoute } from "@tanstack/react-router";
 export const Route = createFileRoute("/api/stream/$id/playlist.m3u8")({
   server: {
     handlers: {
-      GET: async ({ params }) => {
+      GET: async ({ params, request }) => {
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         const { encodeUrl } = await import("@/lib/stream-sign.server");
+
+        const url = new URL(request.url);
+        const sourceId = url.searchParams.get("source");
 
         const { data, error } = await supabaseAdmin
           .from("channels")
@@ -19,7 +22,18 @@ export const Route = createFileRoute("/api/stream/$id/playlist.m3u8")({
           return new Response("Channel not found", { status: 404 });
         }
 
-        const upstream = data.stream_url;
+        // Resolve upstream: explicit source override OR channel default.
+        let upstream = data.stream_url;
+        if (sourceId) {
+          const { data: src } = await supabaseAdmin
+            .from("channel_sources")
+            .select("stream_url,is_active")
+            .eq("id", sourceId)
+            .eq("channel_id", params.id)
+            .maybeSingle();
+          if (src && src.is_active) upstream = src.stream_url;
+        }
+
         try {
           let usedFallback = false;
           let res = await tryFetchPlaylist(upstream, 1, 3000);
