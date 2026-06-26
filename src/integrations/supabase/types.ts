@@ -14,7 +14,89 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      channels: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          is_active: boolean
+          logo_url: string | null
+          name: string
+          sort_order: number
+          stream_url: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          logo_url?: string | null
+          name: string
+          sort_order?: number
+          stream_url: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          logo_url?: string | null
+          name?: string
+          sort_order?: number
+          stream_url?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      matches: {
+        Row: {
+          channel_id: string | null
+          created_at: string
+          id: string
+          is_live: boolean
+          league: string | null
+          start_time: string
+          team_a: string | null
+          team_b: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          channel_id?: string | null
+          created_at?: string
+          id?: string
+          is_live?: boolean
+          league?: string | null
+          start_time: string
+          team_a?: string | null
+          team_b?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          channel_id?: string | null
+          created_at?: string
+          id?: string
+          is_live?: boolean
+          league?: string | null
+          start_time?: string
+          team_a?: string | null
+          team_b?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matches_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
