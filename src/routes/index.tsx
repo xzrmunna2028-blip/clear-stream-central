@@ -110,6 +110,8 @@ function Home() {
         }}
       />
 
+      <WorldCupSection />
+
       <ChannelGrid channels={channels} activeId={active?.id ?? null} onPick={setActive} />
 
       <footer className="mt-10 border-t border-[var(--border)] pt-4 text-center text-xs text-[var(--muted-foreground)]">
