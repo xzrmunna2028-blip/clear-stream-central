@@ -5,6 +5,7 @@ import logo from "@/assets/logo.png";
 import { Player } from "@/components/Player";
 import { ChannelGrid } from "@/components/ChannelGrid";
 import { MatchSchedule } from "@/components/MatchSchedule";
+import { WorldCupSection } from "@/components/WorldCupSection";
 import {
   listChannels,
   listMatches,
@@ -108,6 +109,8 @@ function Home() {
           window.scrollTo({ top: 0, behavior: "smooth" });
         }}
       />
+
+      <WorldCupSection />
 
       <ChannelGrid channels={channels} activeId={active?.id ?? null} onPick={setActive} />
 
