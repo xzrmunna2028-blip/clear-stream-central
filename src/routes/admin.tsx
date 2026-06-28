@@ -626,6 +626,7 @@ function MatchesTab() {
   const [items, setItems] = useState<any[]>([]);
   const [channels, setChannels] = useState<AdminChannel[]>([]);
   const [editing, setEditing] = useState<any | null>(null);
+  const [streamsFor, setStreamsFor] = useState<any | null>(null);
 
   const refresh = useCallback(async () => {
     const [m, c] = await Promise.all([list(), listChAdmin()]);
@@ -633,15 +634,15 @@ function MatchesTab() {
     setChannels(c);
   }, [list, listChAdmin]);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  useEffect(() => { refresh(); }, [refresh]);
 
   const startNew = () =>
     setEditing({
       title: "",
       team_a: "",
       team_b: "",
+      team_a_iso: "",
+      team_b_iso: "",
       league: "",
       channel_id: channels[0]?.id ?? null,
       start_time: new Date().toISOString().slice(0, 16),
@@ -663,9 +664,8 @@ function MatchesTab() {
         <table className="w-full text-sm">
           <thead className="bg-[var(--surface)] text-xs uppercase text-[var(--muted-foreground)]">
             <tr>
-              <th className="px-3 py-2 text-left">Title / Teams</th>
+              <th className="px-3 py-2 text-left">Match</th>
               <th className="px-3 py-2 text-left">League</th>
-              <th className="px-3 py-2 text-left">Channel</th>
               <th className="px-3 py-2 text-left">Start</th>
               <th className="px-3 py-2 text-left">Live</th>
               <th className="px-3 py-2"></th>
@@ -673,17 +673,29 @@ function MatchesTab() {
           </thead>
           <tbody>
             {items.map((m) => {
-              const ch = channels.find((c) => c.id === m.channel_id);
+              const fa = flagUrl(m.team_a_iso || isoForCountry(m.team_a), 40);
+              const fb = flagUrl(m.team_b_iso || isoForCountry(m.team_b), 40);
               return (
                 <tr key={m.id} className="border-t border-[var(--border)]">
                   <td className="px-3 py-2 font-medium">
-                    {m.team_a && m.team_b ? `${m.team_a} vs ${m.team_b}` : m.title}
+                    <div className="flex items-center gap-2">
+                      {fa && <img src={fa} alt="" className="h-4 w-6 rounded-sm object-cover" />}
+                      <span>{m.team_a || "?"}</span>
+                      <span className="text-xs text-[var(--muted-foreground)]">vs</span>
+                      <span>{m.team_b || "?"}</span>
+                      {fb && <img src={fb} alt="" className="h-4 w-6 rounded-sm object-cover" />}
+                    </div>
                   </td>
                   <td className="px-3 py-2 text-xs">{m.league}</td>
-                  <td className="px-3 py-2 text-xs">{ch?.name ?? "—"}</td>
                   <td className="px-3 py-2 text-xs">{new Date(m.start_time).toLocaleString()}</td>
                   <td className="px-3 py-2 text-xs">{m.is_live ? "🔴" : "—"}</td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <button
+                      onClick={() => setStreamsFor(m)}
+                      className="mr-1 rounded border border-[var(--brand)] px-2 py-1 text-xs text-[var(--brand)]"
+                    >
+                      Streams
+                    </button>
                     <button
                       onClick={() => setEditing({ ...m, start_time: m.start_time.slice(0, 16) })}
                       className="mr-1 rounded border border-[var(--border)] px-2 py-1 text-xs"
@@ -706,7 +718,7 @@ function MatchesTab() {
             })}
             {items.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-xs text-[var(--muted-foreground)]">
+                <td colSpan={5} className="px-3 py-6 text-center text-xs text-[var(--muted-foreground)]">
                   No matches scheduled yet.
                 </td>
               </tr>
@@ -726,6 +738,10 @@ function MatchesTab() {
             refresh();
           }}
         />
+      )}
+
+      {streamsFor && (
+        <MatchStreamsModal match={streamsFor} onClose={() => setStreamsFor(null)} />
       )}
     </div>
   );
