@@ -67,15 +67,14 @@ export function ChannelGrid({ channels, activeId, onPick }: Props) {
                   : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--brand)]/60 hover:bg-[var(--surface-elevated)]"
               }`}
             >
-              <div className="grid h-14 w-14 place-items-center overflow-hidden rounded-full bg-[var(--surface-elevated)]">
+              <div className="grid h-16 w-16 place-items-center overflow-hidden rounded-xl bg-white p-1.5 ring-1 ring-[var(--border)]">
                 {c.logo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={c.logo_url}
                     alt={c.name}
                     loading="lazy"
                     referrerPolicy="no-referrer"
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-contain"
                     onError={(e) => {
                       (e.currentTarget as HTMLImageElement).style.display = "none";
                     }}
