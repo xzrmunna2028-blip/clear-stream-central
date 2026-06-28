@@ -99,7 +99,7 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
-type Tab = "channels" | "matches" | "settings";
+type Tab = "channels" | "matches" | "hero" | "settings";
 
 function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>("channels");
