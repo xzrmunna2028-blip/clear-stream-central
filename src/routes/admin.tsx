@@ -864,6 +864,8 @@ function MatchModal({
                   start_time: new Date(f.start_time).toISOString(),
                   team_a: f.team_a || null,
                   team_b: f.team_b || null,
+                  team_a_iso: (f.team_a_iso || isoForCountry(f.team_a)) || null,
+                  team_b_iso: (f.team_b_iso || isoForCountry(f.team_b)) || null,
                   league: f.league || null,
                   channel_id: f.channel_id || null,
                 };
