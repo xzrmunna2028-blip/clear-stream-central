@@ -129,7 +129,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
       </header>
 
       <div className="mb-4 inline-flex rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1">
-        {(["channels", "matches", "settings"] as Tab[]).map((t) => (
+        {(["channels", "matches", "hero", "settings"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -137,12 +137,15 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
               tab === t ? "brand-gradient text-black" : "text-[var(--muted-foreground)] hover:text-foreground"
             }`}
           >
-            {t}
+            {t === "hero" ? "Hero Media" : t}
           </button>
         ))}
       </div>
 
-      {tab === "channels" ? <ChannelsTab /> : tab === "matches" ? <MatchesTab /> : <SettingsTab />}
+      {tab === "channels" ? <ChannelsTab />
+        : tab === "matches" ? <MatchesTab />
+        : tab === "hero" ? <HeroMediaTab />
+        : <SettingsTab />}
     </div>
   );
 }
