@@ -54,11 +54,16 @@ export const adminListChannels = createServerFn({ method: "GET" }).handler(async
   return (data ?? []) as AdminChannel[];
 });
 
+const trimmedUrl = z.preprocess(
+  (v) => (typeof v === "string" ? v.trim() : v),
+  z.string().url().max(2000),
+);
+
 const channelInput = z.object({
   id: z.string().uuid().optional(),
   name: z.string().min(1).max(120),
-  stream_url: z.string().url().max(2000),
-  logo_url: z.string().url().max(2000).nullable().optional(),
+  stream_url: trimmedUrl,
+  logo_url: trimmedUrl.nullable().optional(),
   category: z.string().min(1).max(40).default("sports"),
   sort_order: z.number().int().min(0).max(99999).default(0),
   is_active: z.boolean().default(true),
