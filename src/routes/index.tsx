@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import logo from "@/assets/logo.png";
 import { Player } from "@/components/Player";
 import { ChannelGrid } from "@/components/ChannelGrid";
 import { MatchSchedule } from "@/components/MatchSchedule";
 import { WorldCupSection } from "@/components/WorldCupSection";
+import { LiveMatchHero } from "@/components/LiveMatchHero";
 import {
   listChannels,
   listMatches,
@@ -39,6 +40,10 @@ export const Route = createFileRoute("/")({
   component: Home,
 });
 
+type Mode =
+  | { kind: "channel"; channel: PublicChannel }
+  | { kind: "match"; match: PublicMatch; streamId: string };
+
 function Home() {
   const { channels: initChannels, matches: initMatches } = Route.useLoaderData();
   const refetchCh = useServerFn(listChannels);
@@ -47,32 +52,51 @@ function Home() {
 
   const [channels, setChannels] = useState<PublicChannel[]>(initChannels);
   const [matches, setMatches] = useState<PublicMatch[]>(initMatches);
-  const [active, setActive] = useState<PublicChannel | null>(initChannels[0] ?? null);
+  const [mode, setMode] = useState<Mode | null>(
+    initChannels[0] ? { kind: "channel", channel: initChannels[0] } : null,
+  );
   const [sources, setSources] = useState<PublicSource[]>([]);
+  const playerRef = useRef<HTMLDivElement>(null);
 
-  // Load sources whenever active channel changes
   useEffect(() => {
-    if (!active?.id) { setSources([]); return; }
+    if (mode?.kind !== "channel" || !mode.channel.id) { setSources([]); return; }
+    const chId = mode.channel.id;
     let cancelled = false;
-    fetchSources({ data: { channelId: active.id } })
+    fetchSources({ data: { channelId: chId } })
       .then((r) => { if (!cancelled) setSources(r); })
       .catch(() => { if (!cancelled) setSources([]); });
     return () => { cancelled = true; };
-  }, [active?.id, fetchSources]);
+  }, [mode, fetchSources]);
 
-  // Soft poll for real-time updates from admin
   useEffect(() => {
     const t = setInterval(async () => {
       try {
         const [c, m] = await Promise.all([refetchCh(), refetchMa()]);
         setChannels(c);
         setMatches(m);
-      } catch {
-        // ignore
-      }
+      } catch { /* ignore */ }
     }, 20000);
     return () => clearInterval(t);
   }, [refetchCh, refetchMa]);
+
+  const scrollToPlayer = () => {
+    playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const pickChannel = (c: PublicChannel) => {
+    setMode({ kind: "channel", channel: c });
+    scrollToPlayer();
+  };
+  const pickMatch = (m: PublicMatch, streamId: string) => {
+    setMode({ kind: "match", match: m, streamId });
+    scrollToPlayer();
+  };
+
+  const isMatch = mode?.kind === "match";
+  const playerChannelId = isMatch ? mode.match.id : mode?.kind === "channel" ? mode.channel.id : null;
+  const playerName = isMatch
+    ? `${mode.match.team_a ?? ""} vs ${mode.match.team_b ?? ""}`.trim() || mode.match.title
+    : mode?.kind === "channel" ? mode.channel.name : "";
 
   return (
     <div className="mx-auto max-w-7xl px-3 py-4 sm:px-5 sm:py-6">
@@ -97,7 +121,16 @@ function Home() {
       <h1 className="sr-only">FlashSports HD — Live Television Streaming</h1>
 
       <div className="mb-4">
-        <Player channelId={active?.id ?? null} channelName={active?.name ?? ""} sources={sources} />
+        <LiveMatchHero matches={matches} onWatchMatch={pickMatch} />
+      </div>
+
+      <div ref={playerRef} className="mb-4">
+        <Player
+          channelId={playerChannelId}
+          channelName={playerName}
+          sources={isMatch ? [] : sources}
+          matchStreamId={isMatch ? mode.streamId : null}
+        />
       </div>
 
       <MatchSchedule
@@ -105,14 +138,17 @@ function Home() {
         channels={channels}
         onPlay={(id) => {
           const c = channels.find((x) => x.id === id);
-          if (c) setActive(c);
-          window.scrollTo({ top: 0, behavior: "smooth" });
+          if (c) pickChannel(c);
         }}
       />
 
       <WorldCupSection />
 
-      <ChannelGrid channels={channels} activeId={active?.id ?? null} onPick={setActive} />
+      <ChannelGrid
+        channels={channels}
+        activeId={mode?.kind === "channel" ? mode.channel.id : null}
+        onPick={pickChannel}
+      />
 
       <footer className="mt-10 border-t border-[var(--border)] pt-4 text-center text-xs text-[var(--muted-foreground)]">
         © {new Date().getFullYear()} FlashSports HD · Built for fans
@@ -120,4 +156,3 @@ function Home() {
     </div>
   );
 }
-

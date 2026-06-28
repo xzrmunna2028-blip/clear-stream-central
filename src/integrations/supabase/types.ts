@@ -91,6 +91,80 @@ export type Database = {
         }
         Relationships: []
       }
+      hero_media: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          poster_url: string | null
+          sort_order: number
+          title: string
+          updated_at: string
+          video_url: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          poster_url?: string | null
+          sort_order?: number
+          title?: string
+          updated_at?: string
+          video_url: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          poster_url?: string | null
+          sort_order?: number
+          title?: string
+          updated_at?: string
+          video_url?: string
+        }
+        Relationships: []
+      }
+      match_streams: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          label: string
+          match_id: string
+          sort_order: number
+          stream_url: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label?: string
+          match_id: string
+          sort_order?: number
+          stream_url: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label?: string
+          match_id?: string
+          sort_order?: number
+          stream_url?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_streams_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       matches: {
         Row: {
           channel_id: string | null
@@ -100,7 +174,9 @@ export type Database = {
           league: string | null
           start_time: string
           team_a: string | null
+          team_a_iso: string | null
           team_b: string | null
+          team_b_iso: string | null
           title: string
           updated_at: string
         }
@@ -112,7 +188,9 @@ export type Database = {
           league?: string | null
           start_time: string
           team_a?: string | null
+          team_a_iso?: string | null
           team_b?: string | null
+          team_b_iso?: string | null
           title: string
           updated_at?: string
         }
@@ -124,7 +202,9 @@ export type Database = {
           league?: string | null
           start_time?: string
           team_a?: string | null
+          team_a_iso?: string | null
           team_b?: string | null
+          team_b_iso?: string | null
           title?: string
           updated_at?: string
         }

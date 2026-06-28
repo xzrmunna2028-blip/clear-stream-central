@@ -54,11 +54,16 @@ export const adminListChannels = createServerFn({ method: "GET" }).handler(async
   return (data ?? []) as AdminChannel[];
 });
 
+const trimmedUrl = z.preprocess(
+  (v) => (typeof v === "string" ? v.trim() : v),
+  z.string().url().max(2000),
+);
+
 const channelInput = z.object({
   id: z.string().uuid().optional(),
   name: z.string().min(1).max(120),
-  stream_url: z.string().url().max(2000),
-  logo_url: z.string().url().max(2000).nullable().optional(),
+  stream_url: trimmedUrl,
+  logo_url: trimmedUrl.nullable().optional(),
   category: z.string().min(1).max(40).default("sports"),
   sort_order: z.number().int().min(0).max(99999).default(0),
   is_active: z.boolean().default(true),
@@ -115,6 +120,8 @@ const matchInput = z.object({
   title: z.string().min(1).max(200),
   team_a: z.string().max(80).nullable().optional(),
   team_b: z.string().max(80).nullable().optional(),
+  team_a_iso: z.string().max(10).nullable().optional(),
+  team_b_iso: z.string().max(10).nullable().optional(),
   league: z.string().max(120).nullable().optional(),
   channel_id: z.string().uuid().nullable().optional(),
   start_time: z.string(),
@@ -184,7 +191,7 @@ const sourceInput = z.object({
   id: z.string().uuid().optional(),
   channel_id: z.string().uuid(),
   label: z.string().min(1).max(40),
-  stream_url: z.string().url().max(2000),
+  stream_url: trimmedUrl,
   sort_order: z.number().int().min(0).max(99999).default(0),
   is_active: z.boolean().default(true),
 });
@@ -215,6 +222,131 @@ export const adminDeleteSource = createServerFn({ method: "POST" })
     await requireAdmin();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("channel_sources").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
+  });
+
+// ============ MATCH STREAMS (unlimited M3U links per match) ============
+
+export type AdminMatchStream = {
+  id: string;
+  match_id: string;
+  label: string;
+  stream_url: string;
+  sort_order: number;
+  is_active: boolean;
+};
+
+export const adminListMatchStreams = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ match_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import("./admin-session");
+    await requireAdmin();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rows, error } = await supabaseAdmin
+      .from("match_streams")
+      .select("*")
+      .eq("match_id", data.match_id)
+      .order("sort_order", { ascending: true });
+    if (error) throw new Error(error.message);
+    return (rows ?? []) as AdminMatchStream[];
+  });
+
+const matchStreamInput = z.object({
+  id: z.string().uuid().optional(),
+  match_id: z.string().uuid(),
+  label: z.string().min(1).max(40),
+  stream_url: trimmedUrl,
+  sort_order: z.number().int().min(0).max(99999).default(0),
+  is_active: z.boolean().default(true),
+});
+
+export const adminSaveMatchStream = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => matchStreamInput.parse(d))
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import("./admin-session");
+    await requireAdmin();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    if (data.id) {
+      const { id, ...rest } = data;
+      const { error } = await supabaseAdmin.from("match_streams").update(rest).eq("id", id);
+      if (error) throw new Error(error.message);
+      return { ok: true as const, id };
+    }
+    const { id: _o, ...rest } = data;
+    const { data: row, error } = await supabaseAdmin
+      .from("match_streams").insert(rest).select("id").single();
+    if (error) throw new Error(error.message);
+    return { ok: true as const, id: row!.id };
+  });
+
+export const adminDeleteMatchStream = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import("./admin-session");
+    await requireAdmin();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("match_streams").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
+  });
+
+// ============ HERO MEDIA (Coming Soon videos) ============
+
+export type AdminHeroMedia = {
+  id: string;
+  title: string;
+  video_url: string;
+  poster_url: string | null;
+  is_active: boolean;
+  sort_order: number;
+};
+
+export const adminListHeroMedia = createServerFn({ method: "GET" }).handler(async () => {
+  const { requireAdmin } = await import("./admin-session");
+  await requireAdmin();
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin
+    .from("hero_media").select("*").order("sort_order", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as AdminHeroMedia[];
+});
+
+const heroInput = z.object({
+  id: z.string().uuid().optional(),
+  title: z.string().min(1).max(120).default("Coming Soon"),
+  video_url: trimmedUrl,
+  poster_url: trimmedUrl.nullable().optional(),
+  is_active: z.boolean().default(true),
+  sort_order: z.number().int().min(0).max(99999).default(0),
+});
+
+export const adminSaveHeroMedia = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => heroInput.parse(d))
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import("./admin-session");
+    await requireAdmin();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    if (data.id) {
+      const { id, ...rest } = data;
+      const { error } = await supabaseAdmin.from("hero_media").update(rest).eq("id", id);
+      if (error) throw new Error(error.message);
+      return { ok: true as const, id };
+    }
+    const { id: _o, ...rest } = data;
+    const { data: row, error } = await supabaseAdmin
+      .from("hero_media").insert(rest).select("id").single();
+    if (error) throw new Error(error.message);
+    return { ok: true as const, id: row!.id };
+  });
+
+export const adminDeleteHeroMedia = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import("./admin-session");
+    await requireAdmin();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("hero_media").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true as const };
   });

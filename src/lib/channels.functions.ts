@@ -1,5 +1,6 @@
 // Public channel/match read fns — exposes ONLY safe fields. Stream URL stays server-side.
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 
 export type PublicChannel = {
   id: string;
@@ -14,6 +15,8 @@ export type PublicMatch = {
   title: string;
   team_a: string | null;
   team_b: string | null;
+  team_a_iso: string | null;
+  team_b_iso: string | null;
   league: string | null;
   channel_id: string | null;
   start_time: string;
@@ -21,6 +24,13 @@ export type PublicMatch = {
 };
 
 export type PublicSource = { id: string; label: string };
+export type PublicMatchStream = { id: string; label: string };
+export type PublicHeroMedia = {
+  id: string;
+  title: string;
+  video_url: string;
+  poster_url: string | null;
+};
 
 export const listChannels = createServerFn({ method: "GET" }).handler(
   async (): Promise<PublicChannel[]> => {
@@ -40,14 +50,12 @@ export const listMatches = createServerFn({ method: "GET" }).handler(
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data, error } = await supabaseAdmin
       .from("matches")
-      .select("id,title,team_a,team_b,league,channel_id,start_time,is_live")
+      .select("id,title,team_a,team_b,team_a_iso,team_b_iso,league,channel_id,start_time,is_live")
       .order("start_time", { ascending: true });
     if (error) throw new Error(error.message);
     return (data ?? []) as PublicMatch[];
   },
 );
-
-import { z } from "zod";
 
 export const listChannelSources = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ channelId: z.string().uuid() }).parse(d))
@@ -62,3 +70,30 @@ export const listChannelSources = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     return (rows ?? []) as PublicSource[];
   });
+
+export const listMatchStreams = createServerFn({ method: "GET" })
+  .inputValidator((d: unknown) => z.object({ matchId: z.string().uuid() }).parse(d))
+  .handler(async ({ data }): Promise<PublicMatchStream[]> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rows, error } = await supabaseAdmin
+      .from("match_streams")
+      .select("id,label")
+      .eq("match_id", data.matchId)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+    if (error) throw new Error(error.message);
+    return (rows ?? []) as PublicMatchStream[];
+  });
+
+export const listHeroMedia = createServerFn({ method: "GET" }).handler(
+  async (): Promise<PublicHeroMedia[]> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("hero_media")
+      .select("id,title,video_url,poster_url")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as PublicHeroMedia[];
+  },
+);

@@ -14,10 +14,19 @@ import {
   adminListSources,
   adminSaveSource,
   adminDeleteSource,
+  adminListMatchStreams,
+  adminSaveMatchStream,
+  adminDeleteMatchStream,
+  adminListHeroMedia,
+  adminSaveHeroMedia,
+  adminDeleteHeroMedia,
   type AdminChannel,
   type AdminSource,
+  type AdminMatchStream,
+  type AdminHeroMedia,
 } from "@/lib/admin.functions";
 import { getSiteSettings, adminUpdateSiteSettings } from "@/lib/site-settings.functions";
+import { COUNTRY_OPTIONS, flagUrl, isoForCountry } from "@/lib/countries";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -99,7 +108,7 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
-type Tab = "channels" | "matches" | "settings";
+type Tab = "channels" | "matches" | "hero" | "settings";
 
 function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>("channels");
@@ -129,7 +138,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
       </header>
 
       <div className="mb-4 inline-flex rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1">
-        {(["channels", "matches", "settings"] as Tab[]).map((t) => (
+        {(["channels", "matches", "hero", "settings"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -137,12 +146,15 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
               tab === t ? "brand-gradient text-black" : "text-[var(--muted-foreground)] hover:text-foreground"
             }`}
           >
-            {t}
+            {t === "hero" ? "Hero Media" : t}
           </button>
         ))}
       </div>
 
-      {tab === "channels" ? <ChannelsTab /> : tab === "matches" ? <MatchesTab /> : <SettingsTab />}
+      {tab === "channels" ? <ChannelsTab />
+        : tab === "matches" ? <MatchesTab />
+        : tab === "hero" ? <HeroMediaTab />
+        : <SettingsTab />}
     </div>
   );
 }
@@ -614,6 +626,7 @@ function MatchesTab() {
   const [items, setItems] = useState<any[]>([]);
   const [channels, setChannels] = useState<AdminChannel[]>([]);
   const [editing, setEditing] = useState<any | null>(null);
+  const [streamsFor, setStreamsFor] = useState<any | null>(null);
 
   const refresh = useCallback(async () => {
     const [m, c] = await Promise.all([list(), listChAdmin()]);
@@ -621,15 +634,15 @@ function MatchesTab() {
     setChannels(c);
   }, [list, listChAdmin]);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  useEffect(() => { refresh(); }, [refresh]);
 
   const startNew = () =>
     setEditing({
       title: "",
       team_a: "",
       team_b: "",
+      team_a_iso: "",
+      team_b_iso: "",
       league: "",
       channel_id: channels[0]?.id ?? null,
       start_time: new Date().toISOString().slice(0, 16),
@@ -651,9 +664,8 @@ function MatchesTab() {
         <table className="w-full text-sm">
           <thead className="bg-[var(--surface)] text-xs uppercase text-[var(--muted-foreground)]">
             <tr>
-              <th className="px-3 py-2 text-left">Title / Teams</th>
+              <th className="px-3 py-2 text-left">Match</th>
               <th className="px-3 py-2 text-left">League</th>
-              <th className="px-3 py-2 text-left">Channel</th>
               <th className="px-3 py-2 text-left">Start</th>
               <th className="px-3 py-2 text-left">Live</th>
               <th className="px-3 py-2"></th>
@@ -661,17 +673,29 @@ function MatchesTab() {
           </thead>
           <tbody>
             {items.map((m) => {
-              const ch = channels.find((c) => c.id === m.channel_id);
+              const fa = flagUrl(m.team_a_iso || isoForCountry(m.team_a), 40);
+              const fb = flagUrl(m.team_b_iso || isoForCountry(m.team_b), 40);
               return (
                 <tr key={m.id} className="border-t border-[var(--border)]">
                   <td className="px-3 py-2 font-medium">
-                    {m.team_a && m.team_b ? `${m.team_a} vs ${m.team_b}` : m.title}
+                    <div className="flex items-center gap-2">
+                      {fa && <img src={fa} alt="" className="h-4 w-6 rounded-sm object-cover" />}
+                      <span>{m.team_a || "?"}</span>
+                      <span className="text-xs text-[var(--muted-foreground)]">vs</span>
+                      <span>{m.team_b || "?"}</span>
+                      {fb && <img src={fb} alt="" className="h-4 w-6 rounded-sm object-cover" />}
+                    </div>
                   </td>
                   <td className="px-3 py-2 text-xs">{m.league}</td>
-                  <td className="px-3 py-2 text-xs">{ch?.name ?? "—"}</td>
                   <td className="px-3 py-2 text-xs">{new Date(m.start_time).toLocaleString()}</td>
                   <td className="px-3 py-2 text-xs">{m.is_live ? "🔴" : "—"}</td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <button
+                      onClick={() => setStreamsFor(m)}
+                      className="mr-1 rounded border border-[var(--brand)] px-2 py-1 text-xs text-[var(--brand)]"
+                    >
+                      Streams
+                    </button>
                     <button
                       onClick={() => setEditing({ ...m, start_time: m.start_time.slice(0, 16) })}
                       className="mr-1 rounded border border-[var(--border)] px-2 py-1 text-xs"
@@ -694,7 +718,7 @@ function MatchesTab() {
             })}
             {items.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-xs text-[var(--muted-foreground)]">
+                <td colSpan={5} className="px-3 py-6 text-center text-xs text-[var(--muted-foreground)]">
                   No matches scheduled yet.
                 </td>
               </tr>
@@ -714,6 +738,10 @@ function MatchesTab() {
             refresh();
           }}
         />
+      )}
+
+      {streamsFor && (
+        <MatchStreamsModal match={streamsFor} onClose={() => setStreamsFor(null)} />
       )}
     </div>
   );
@@ -735,29 +763,68 @@ function MatchModal({
     title: initial.title ?? "",
     team_a: initial.team_a ?? "",
     team_b: initial.team_b ?? "",
+    team_a_iso: initial.team_a_iso ?? "",
+    team_b_iso: initial.team_b_iso ?? "",
     league: initial.league ?? "",
     channel_id: initial.channel_id ?? null,
     start_time: initial.start_time ?? new Date().toISOString().slice(0, 16),
     is_live: !!initial.is_live,
   });
   const [busy, setBusy] = useState(false);
+  const isoA = f.team_a_iso || isoForCountry(f.team_a);
+  const isoB = f.team_b_iso || isoForCountry(f.team_b);
+  const flagA = flagUrl(isoA, 80);
+  const flagB = flagUrl(isoB, 80);
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="w-full max-w-lg rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 overflow-y-auto">
+      <div className="w-full max-w-lg rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 my-8">
         <div className="mb-3 text-base font-semibold">{f.id ? "Edit Match" : "Add Match"}</div>
         <div className="space-y-3">
           <Field label="Title (fallback if no teams)">
             <input className={inp} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Team A"><input className={inp} value={f.team_a} onChange={(e) => setF({ ...f, team_a: e.target.value })} /></Field>
-            <Field label="Team B"><input className={inp} value={f.team_b} onChange={(e) => setF({ ...f, team_b: e.target.value })} /></Field>
+
+          <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
+            <div className="space-y-2">
+              <Field label="Team A">
+                <input className={inp} value={f.team_a} onChange={(e) => setF({ ...f, team_a: e.target.value })} />
+              </Field>
+              <Field label="Flag (auto)">
+                <select className={inp} value={f.team_a_iso} onChange={(e) => setF({ ...f, team_a_iso: e.target.value })}>
+                  <option value="">Auto from name</option>
+                  {COUNTRY_OPTIONS.map((c) => (
+                    <option key={c.iso} value={c.iso}>{c.name}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <div className="pb-2 text-center">
+              <div className="flex items-end gap-2">
+                {flagA ? <img src={flagA} alt="" className="h-8 w-12 rounded-sm object-cover ring-1 ring-[var(--border)]" /> : <div className="h-8 w-12 rounded-sm bg-[var(--surface-elevated)]" />}
+                <span className="pb-0.5 text-xs font-bold">VS</span>
+                {flagB ? <img src={flagB} alt="" className="h-8 w-12 rounded-sm object-cover ring-1 ring-[var(--border)]" /> : <div className="h-8 w-12 rounded-sm bg-[var(--surface-elevated)]" />}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Field label="Team B">
+                <input className={inp} value={f.team_b} onChange={(e) => setF({ ...f, team_b: e.target.value })} />
+              </Field>
+              <Field label="Flag (auto)">
+                <select className={inp} value={f.team_b_iso} onChange={(e) => setF({ ...f, team_b_iso: e.target.value })}>
+                  <option value="">Auto from name</option>
+                  {COUNTRY_OPTIONS.map((c) => (
+                    <option key={c.iso} value={c.iso}>{c.name}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
           </div>
+
           <Field label="League">
             <input className={inp} value={f.league} onChange={(e) => setF({ ...f, league: e.target.value })} />
           </Field>
-          <Field label="Channel">
+          <Field label="Channel (optional fallback)">
             <select
               className={inp}
               value={f.channel_id ?? ""}
@@ -781,6 +848,9 @@ function MatchModal({
             <input type="checkbox" checked={f.is_live} onChange={(e) => setF({ ...f, is_live: e.target.checked })} />
             Mark as live
           </label>
+          <div className="rounded-md border border-[var(--border)] bg-[var(--background)] p-2 text-xs text-[var(--muted-foreground)]">
+            Tip: After saving, click <b className="text-foreground">Streams</b> on this match's row to add unlimited M3U/HLS links users will tap to watch.
+          </div>
         </div>
         <div className="mt-5 flex justify-end gap-2">
           <button onClick={onClose} className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm">Cancel</button>
@@ -794,6 +864,8 @@ function MatchModal({
                   start_time: new Date(f.start_time).toISOString(),
                   team_a: f.team_a || null,
                   team_b: f.team_b || null,
+                  team_a_iso: (f.team_a_iso || isoForCountry(f.team_a)) || null,
+                  team_b_iso: (f.team_b_iso || isoForCountry(f.team_b)) || null,
                   league: f.league || null,
                   channel_id: f.channel_id || null,
                 };
@@ -821,5 +893,175 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block text-xs text-[var(--muted-foreground)]">{label}</span>
       {children}
     </label>
+  );
+}
+
+// ============ Match Streams Modal ============
+function MatchStreamsModal({ match, onClose }: { match: any; onClose: () => void }) {
+  const list = useServerFn(adminListMatchStreams);
+  const save = useServerFn(adminSaveMatchStream);
+  const del = useServerFn(adminDeleteMatchStream);
+  const [rows, setRows] = useState<AdminMatchStream[]>([]);
+  const [draft, setDraft] = useState({ label: "Server 1", stream_url: "", sort_order: 0, is_active: true });
+  const [busy, setBusy] = useState(false);
+
+  const refresh = useCallback(async () => {
+    const r = await list({ data: { match_id: match.id } });
+    setRows(r);
+  }, [list, match.id]);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 overflow-y-auto">
+      <div className="w-full max-w-xl rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 my-8">
+        <div className="mb-1 text-base font-semibold">Match Streams</div>
+        <div className="mb-4 text-xs text-[var(--muted-foreground)]">
+          {match.team_a && match.team_b ? `${match.team_a} vs ${match.team_b}` : match.title}
+        </div>
+
+        <div className="mb-4 space-y-2">
+          {rows.length === 0 && (
+            <div className="rounded-md border border-dashed border-[var(--border)] p-4 text-center text-xs text-[var(--muted-foreground)]">
+              No streams yet. Add one below.
+            </div>
+          )}
+          {rows.map((s) => (
+            <div key={s.id} className="flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--background)] p-2">
+              <span className="rounded bg-[var(--brand)] px-2 py-0.5 text-[10px] font-bold text-black">{s.label}</span>
+              <span className="flex-1 truncate text-xs text-[var(--muted-foreground)]" title={s.stream_url}>{s.stream_url}</span>
+              <span className={`text-[10px] ${s.is_active ? "text-emerald-400" : "text-[var(--muted-foreground)]"}`}>{s.is_active ? "ON" : "OFF"}</span>
+              <button
+                onClick={async () => {
+                  await save({ data: { ...s, is_active: !s.is_active } });
+                  refresh();
+                }}
+                className="rounded border border-[var(--border)] px-2 py-0.5 text-[10px]"
+              >Toggle</button>
+              <button
+                onClick={async () => {
+                  if (!confirm("Delete stream?")) return;
+                  await del({ data: { id: s.id } });
+                  refresh();
+                }}
+                className="rounded bg-[var(--destructive)] px-2 py-0.5 text-[10px] text-white"
+              >Del</button>
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
+          <div className="mb-2 text-xs font-semibold uppercase text-[var(--muted-foreground)]">Add stream (M3U / HLS)</div>
+          <div className="grid grid-cols-[120px_1fr] gap-2">
+            <input className={inp} placeholder="Label" value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
+            <input className={inp} placeholder="https://…/playlist.m3u8" value={draft.stream_url} onChange={(e) => setDraft({ ...draft, stream_url: e.target.value })} />
+          </div>
+          <div className="mt-2 flex justify-end">
+            <button
+              disabled={busy || !draft.stream_url || !draft.label}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await save({ data: { ...draft, match_id: match.id, sort_order: rows.length } });
+                  setDraft({ label: `Server ${rows.length + 2}`, stream_url: "", sort_order: 0, is_active: true });
+                  refresh();
+                } finally { setBusy(false); }
+              }}
+              className="brand-gradient rounded-md px-3 py-1.5 text-xs font-semibold text-black disabled:opacity-60"
+            >
+              {busy ? "Adding…" : "+ Add stream"}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 flex justify-end">
+          <button onClick={onClose} className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm">Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ Hero Media Tab (Coming Soon gallery) ============
+function HeroMediaTab() {
+  const list = useServerFn(adminListHeroMedia);
+  const save = useServerFn(adminSaveHeroMedia);
+  const del = useServerFn(adminDeleteHeroMedia);
+  const [rows, setRows] = useState<AdminHeroMedia[]>([]);
+  const [draft, setDraft] = useState({ title: "Coming Soon", video_url: "", poster_url: "", is_active: true, sort_order: 0 });
+  const [busy, setBusy] = useState(false);
+
+  const refresh = useCallback(async () => setRows(await list()), [list]);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  return (
+    <div>
+      <div className="mb-3 text-sm text-[var(--muted-foreground)]">
+        Videos shown in the home hero when <b className="text-foreground">no match is live</b>.
+      </div>
+
+      <div className="mb-5 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        {rows.map((m) => (
+          <div key={m.id} className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+            {m.poster_url ? (
+              <img src={m.poster_url} alt="" className="aspect-video w-full object-cover" />
+            ) : (
+              <div className="grid aspect-video place-items-center bg-[var(--background)] text-xs text-[var(--muted-foreground)]">No poster</div>
+            )}
+            <div className="p-3">
+              <div className="mb-1 truncate text-sm font-semibold">{m.title}</div>
+              <div className="mb-2 truncate text-[10px] text-[var(--muted-foreground)]" title={m.video_url}>{m.video_url}</div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={async () => { await save({ data: { ...m, is_active: !m.is_active } }); refresh(); }}
+                  className={`rounded border px-2 py-0.5 text-[10px] ${m.is_active ? "border-emerald-500/40 text-emerald-400" : "border-[var(--border)] text-[var(--muted-foreground)]"}`}
+                >{m.is_active ? "Active" : "Inactive"}</button>
+                <button
+                  onClick={async () => { if (!confirm("Delete?")) return; await del({ data: { id: m.id } }); refresh(); }}
+                  className="ml-auto rounded bg-[var(--destructive)] px-2 py-0.5 text-[10px] text-white"
+                >Del</button>
+              </div>
+            </div>
+          </div>
+        ))}
+        {rows.length === 0 && (
+          <div className="md:col-span-2 lg:col-span-3 rounded-md border border-dashed border-[var(--border)] p-6 text-center text-xs text-[var(--muted-foreground)]">
+            No hero media yet.
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
+        <div className="mb-3 text-sm font-semibold">Add hero video</div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Title">
+            <input className={inp} value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+          </Field>
+          <Field label="Poster image URL (optional)">
+            <input className={inp} value={draft.poster_url} onChange={(e) => setDraft({ ...draft, poster_url: e.target.value })} placeholder="https://…" />
+          </Field>
+          <div className="md:col-span-2">
+            <Field label="Video URL (.mp4 or .m3u8)">
+              <input className={inp} value={draft.video_url} onChange={(e) => setDraft({ ...draft, video_url: e.target.value })} placeholder="https://…/coming-soon.mp4" />
+            </Field>
+          </div>
+        </div>
+        <div className="mt-3 flex justify-end">
+          <button
+            disabled={busy || !draft.video_url}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await save({ data: { ...draft, poster_url: draft.poster_url || null, sort_order: rows.length } });
+                setDraft({ title: "Coming Soon", video_url: "", poster_url: "", is_active: true, sort_order: 0 });
+                refresh();
+              } finally { setBusy(false); }
+            }}
+            className="brand-gradient rounded-md px-4 py-1.5 text-sm font-semibold text-black disabled:opacity-60"
+          >
+            {busy ? "Saving…" : "+ Add video"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

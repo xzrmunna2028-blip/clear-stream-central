@@ -1,6 +1,11 @@
 // Manifest entry point. Resolves channel -> source URL, fetches & rewrites all
 // inner URIs through /api/stream/proxy with HMAC-signed payloads. The original
 // upstream URL never reaches the client.
+//
+// IMPORTANT: We do NOT silently fall back to another channel's stream. If the
+// requested channel's upstream is offline, we return a clear 502 so the player
+// can tell the user. (Silent fallback was the cause of "every new channel plays
+// T-Sport".)
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/api/stream/$id/playlist.m3u8")({
@@ -12,44 +17,50 @@ export const Route = createFileRoute("/api/stream/$id/playlist.m3u8")({
 
         const url = new URL(request.url);
         const sourceId = url.searchParams.get("source");
+        const matchStreamId = url.searchParams.get("match_stream");
 
-        const { data, error } = await supabaseAdmin
-          .from("channels")
-          .select("stream_url,is_active,category")
-          .eq("id", params.id)
-          .maybeSingle();
-        if (error || !data || !data.is_active) {
-          return new Response("Channel not found", { status: 404 });
-        }
+        // Resolve upstream URL based on the requested resource.
+        let upstream: string | null = null;
 
-        // Resolve upstream: explicit source override OR channel default.
-        let upstream = data.stream_url;
-        if (sourceId) {
-          const { data: src } = await supabaseAdmin
-            .from("channel_sources")
-            .select("stream_url,is_active")
-            .eq("id", sourceId)
-            .eq("channel_id", params.id)
+        if (matchStreamId) {
+          // Match-stream playback path: id segment is the match id.
+          const { data: ms } = await supabaseAdmin
+            .from("match_streams")
+            .select("stream_url,is_active,match_id")
+            .eq("id", matchStreamId)
+            .eq("match_id", params.id)
             .maybeSingle();
-          if (src && src.is_active) upstream = src.stream_url;
+          if (!ms || !ms.is_active) return new Response("Stream not found", { status: 404 });
+          upstream = ms.stream_url;
+        } else {
+          const { data, error } = await supabaseAdmin
+            .from("channels")
+            .select("stream_url,is_active")
+            .eq("id", params.id)
+            .maybeSingle();
+          if (error || !data || !data.is_active) {
+            return new Response("Channel not found", { status: 404 });
+          }
+          upstream = data.stream_url;
+          if (sourceId) {
+            const { data: src } = await supabaseAdmin
+              .from("channel_sources")
+              .select("stream_url,is_active")
+              .eq("id", sourceId)
+              .eq("channel_id", params.id)
+              .maybeSingle();
+            if (src && src.is_active) upstream = src.stream_url;
+          }
         }
+
+        if (!upstream) return new Response("Stream not configured", { status: 404 });
+        // Tolerate accidental whitespace in pasted URLs.
+        upstream = upstream.trim();
 
         try {
-          let usedFallback = false;
-          let res = await tryFetchPlaylist(upstream, 1, 3000);
-          if (!res) {
-            const fallback = await fetchFallbackPlaylist(
-              supabaseAdmin,
-              params.id,
-              data.category ?? null,
-              upstream,
-            );
-            if (!fallback) return upstreamErrorResponse();
-            res = fallback.res;
-            usedFallback = true;
-          }
+          const res = await tryFetchPlaylist(upstream, 2, 6000);
+          if (!res) return upstreamErrorResponse();
           const text = await res.text();
-          // Use final (post-redirect) URL as base so relative segment URIs resolve correctly.
           const baseUrl = res.url || upstream;
           const rewritten = rewriteManifest(text, baseUrl, encodeUrl);
           return new Response(rewritten, {
@@ -58,7 +69,6 @@ export const Route = createFileRoute("/api/stream/$id/playlist.m3u8")({
               "content-type": "application/vnd.apple.mpegurl",
               "cache-control": "no-store",
               "access-control-allow-origin": "*",
-              "x-stream-fallback": usedFallback ? "1" : "0",
             },
           });
         } catch (e) {
@@ -77,53 +87,12 @@ function upstreamErrorResponse() {
   });
 }
 
-async function tryFetchPlaylist(url: string, attempts = 1, timeoutMs = 3000): Promise<Response | null> {
+async function tryFetchPlaylist(url: string, attempts = 2, timeoutMs = 6000): Promise<Response | null> {
   try {
     const res = await fetchUpstream(url, attempts, timeoutMs);
     return res.ok ? res : null;
   } catch (error) {
     console.warn("playlist upstream unavailable", error);
-    return null;
-  }
-}
-
-async function fetchFallbackPlaylist(
-  supabaseAdmin: any,
-  currentId: string,
-  category: string | null,
-  originalUrl: string,
-): Promise<{ res: Response; sourceUrl: string } | null> {
-  let query = supabaseAdmin
-    .from("channels")
-    .select("id,stream_url")
-    .eq("is_active", true)
-    .neq("id", currentId)
-    .order("sort_order", { ascending: true })
-    .limit(10);
-
-  if (category) query = query.eq("category", category);
-
-  const { data, error } = await query;
-  if (error) {
-    console.warn("fallback stream lookup failed", error.message);
-    return null;
-  }
-
-  const candidates = (data ?? [])
-    .map((row: { stream_url?: string | null }) => row.stream_url)
-    .filter((url: string | null | undefined): url is string => !!url && url !== originalUrl);
-
-  if (candidates.length === 0) return null;
-
-  try {
-    return await Promise.any(
-      candidates.map(async (sourceUrl: string) => {
-        const res = await tryFetchPlaylist(sourceUrl, 1, 3500);
-        if (!res) throw new Error("fallback unavailable");
-        return { res, sourceUrl };
-      }),
-    );
-  } catch {
     return null;
   }
 }
@@ -170,7 +139,6 @@ export function rewriteManifest(
   const lines = text.split(/\r?\n/);
   for (const raw of lines) {
     let line = raw;
-    // Rewrite URI="..." inside tags (#EXT-X-KEY, #EXT-X-MEDIA, #EXT-X-MAP, etc.)
     if (line.startsWith("#") && line.includes('URI="')) {
       line = line.replace(/URI="([^"]+)"/g, (_m, u) => {
         const abs = resolveUrl(baseUrl, u);
@@ -179,7 +147,6 @@ export function rewriteManifest(
       });
     }
     if (line.length > 0 && !line.startsWith("#")) {
-      // segment / sub-playlist URI line
       const abs = resolveUrl(baseUrl, line.trim());
       const { u: eu, s } = enc(abs);
       line = `/api/stream/proxy?u=${eu}&s=${s}`;
