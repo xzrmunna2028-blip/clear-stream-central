@@ -191,7 +191,7 @@ const sourceInput = z.object({
   id: z.string().uuid().optional(),
   channel_id: z.string().uuid(),
   label: z.string().min(1).max(40),
-  stream_url: z.string().url().max(2000),
+  stream_url: trimmedUrl,
   sort_order: z.number().int().min(0).max(99999).default(0),
   is_active: z.boolean().default(true),
 });
