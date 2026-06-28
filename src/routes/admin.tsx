@@ -763,29 +763,68 @@ function MatchModal({
     title: initial.title ?? "",
     team_a: initial.team_a ?? "",
     team_b: initial.team_b ?? "",
+    team_a_iso: initial.team_a_iso ?? "",
+    team_b_iso: initial.team_b_iso ?? "",
     league: initial.league ?? "",
     channel_id: initial.channel_id ?? null,
     start_time: initial.start_time ?? new Date().toISOString().slice(0, 16),
     is_live: !!initial.is_live,
   });
   const [busy, setBusy] = useState(false);
+  const isoA = f.team_a_iso || isoForCountry(f.team_a);
+  const isoB = f.team_b_iso || isoForCountry(f.team_b);
+  const flagA = flagUrl(isoA, 80);
+  const flagB = flagUrl(isoB, 80);
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="w-full max-w-lg rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 overflow-y-auto">
+      <div className="w-full max-w-lg rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 my-8">
         <div className="mb-3 text-base font-semibold">{f.id ? "Edit Match" : "Add Match"}</div>
         <div className="space-y-3">
           <Field label="Title (fallback if no teams)">
             <input className={inp} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Team A"><input className={inp} value={f.team_a} onChange={(e) => setF({ ...f, team_a: e.target.value })} /></Field>
-            <Field label="Team B"><input className={inp} value={f.team_b} onChange={(e) => setF({ ...f, team_b: e.target.value })} /></Field>
+
+          <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
+            <div className="space-y-2">
+              <Field label="Team A">
+                <input className={inp} value={f.team_a} onChange={(e) => setF({ ...f, team_a: e.target.value })} />
+              </Field>
+              <Field label="Flag (auto)">
+                <select className={inp} value={f.team_a_iso} onChange={(e) => setF({ ...f, team_a_iso: e.target.value })}>
+                  <option value="">Auto from name</option>
+                  {COUNTRY_OPTIONS.map((c) => (
+                    <option key={c.iso} value={c.iso}>{c.name}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <div className="pb-2 text-center">
+              <div className="flex items-end gap-2">
+                {flagA ? <img src={flagA} alt="" className="h-8 w-12 rounded-sm object-cover ring-1 ring-[var(--border)]" /> : <div className="h-8 w-12 rounded-sm bg-[var(--surface-elevated)]" />}
+                <span className="pb-0.5 text-xs font-bold">VS</span>
+                {flagB ? <img src={flagB} alt="" className="h-8 w-12 rounded-sm object-cover ring-1 ring-[var(--border)]" /> : <div className="h-8 w-12 rounded-sm bg-[var(--surface-elevated)]" />}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Field label="Team B">
+                <input className={inp} value={f.team_b} onChange={(e) => setF({ ...f, team_b: e.target.value })} />
+              </Field>
+              <Field label="Flag (auto)">
+                <select className={inp} value={f.team_b_iso} onChange={(e) => setF({ ...f, team_b_iso: e.target.value })}>
+                  <option value="">Auto from name</option>
+                  {COUNTRY_OPTIONS.map((c) => (
+                    <option key={c.iso} value={c.iso}>{c.name}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
           </div>
+
           <Field label="League">
             <input className={inp} value={f.league} onChange={(e) => setF({ ...f, league: e.target.value })} />
           </Field>
-          <Field label="Channel">
+          <Field label="Channel (optional fallback)">
             <select
               className={inp}
               value={f.channel_id ?? ""}
@@ -809,6 +848,9 @@ function MatchModal({
             <input type="checkbox" checked={f.is_live} onChange={(e) => setF({ ...f, is_live: e.target.checked })} />
             Mark as live
           </label>
+          <div className="rounded-md border border-[var(--border)] bg-[var(--background)] p-2 text-xs text-[var(--muted-foreground)]">
+            Tip: After saving, click <b className="text-foreground">Streams</b> on this match's row to add unlimited M3U/HLS links users will tap to watch.
+          </div>
         </div>
         <div className="mt-5 flex justify-end gap-2">
           <button onClick={onClose} className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm">Cancel</button>
