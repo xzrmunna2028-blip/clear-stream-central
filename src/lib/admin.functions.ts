@@ -120,6 +120,8 @@ const matchInput = z.object({
   title: z.string().min(1).max(200),
   team_a: z.string().max(80).nullable().optional(),
   team_b: z.string().max(80).nullable().optional(),
+  team_a_iso: z.string().max(10).nullable().optional(),
+  team_b_iso: z.string().max(10).nullable().optional(),
   league: z.string().max(120).nullable().optional(),
   channel_id: z.string().uuid().nullable().optional(),
   start_time: z.string(),
