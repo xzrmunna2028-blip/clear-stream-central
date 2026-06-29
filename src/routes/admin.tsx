@@ -164,6 +164,7 @@ function SettingsTab() {
   const save = useServerFn(adminUpdateSiteSettings);
   const [on, setOn] = useState(false);
   const [msg, setMsg] = useState("");
+  const [marquee, setMarquee] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -172,6 +173,7 @@ function SettingsTab() {
     get().then((s) => {
       setOn(s.maintenance_mode);
       setMsg(s.maintenance_message);
+      setMarquee(s.marquee_text);
       setLoaded(true);
     });
   }, [get]);
@@ -181,9 +183,10 @@ function SettingsTab() {
     setBusy(true);
     setSaved(false);
     try {
-      const s = await save({ data: { maintenance_mode: on, maintenance_message: msg } });
+      const s = await save({ data: { maintenance_mode: on, maintenance_message: msg, marquee_text: marquee } });
       setOn(s.maintenance_mode);
       setMsg(s.maintenance_message);
+      setMarquee(s.marquee_text);
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2000);
     } finally {
@@ -217,12 +220,23 @@ function SettingsTab() {
         </button>
       </label>
 
-      <label className="mb-1 block text-xs text-[var(--muted-foreground)]">Status message (scrolls under the logo)</label>
+      <label className="mb-1 block text-xs text-[var(--muted-foreground)]">Maintenance status message</label>
       <input
         value={msg}
         onChange={(e) => setMsg(e.target.value)}
         maxLength={300}
         placeholder="Updating channels…"
+        className="mb-4 w-full rounded-md border border-[var(--border)] bg-black/30 px-3 py-2 text-sm outline-none focus:border-[var(--brand)]"
+      />
+
+      <label className="mb-1 block text-xs text-[var(--muted-foreground)]">
+        Marquee text (scrolls under upcoming match promos)
+      </label>
+      <input
+        value={marquee}
+        onChange={(e) => setMarquee(e.target.value)}
+        maxLength={500}
+        placeholder="Match starts in 2 hours — stay tuned!"
         className="mb-4 w-full rounded-md border border-[var(--border)] bg-black/30 px-3 py-2 text-sm outline-none focus:border-[var(--brand)]"
       />
 
@@ -239,6 +253,7 @@ function SettingsTab() {
     </form>
   );
 }
+
 
 function ChannelsTab() {
   const list = useServerFn(adminListChannels);

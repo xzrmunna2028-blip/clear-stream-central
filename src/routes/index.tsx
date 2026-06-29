@@ -4,9 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import logo from "@/assets/logo.png";
 import { Player } from "@/components/Player";
 import { ChannelGrid } from "@/components/ChannelGrid";
-import { MatchSchedule } from "@/components/MatchSchedule";
 import { WorldCupSection } from "@/components/WorldCupSection";
-import { LiveMatchHero } from "@/components/LiveMatchHero";
+import { MatchPlayerView } from "@/components/MatchPlayerView";
 import {
   listChannels,
   listMatches,
@@ -15,6 +14,7 @@ import {
   type PublicMatch,
   type PublicSource,
 } from "@/lib/channels.functions";
+import { getSiteSettings } from "@/lib/site-settings.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -34,69 +34,61 @@ export const Route = createFileRoute("/")({
     ],
   }),
   loader: async () => {
-    const [channels, matches] = await Promise.all([listChannels(), listMatches()]);
-    return { channels, matches };
+    const [channels, matches, settings] = await Promise.all([
+      listChannels(),
+      listMatches(),
+      getSiteSettings(),
+    ]);
+    return { channels, matches, settings };
   },
   component: Home,
 });
 
 type Mode =
   | { kind: "channel"; channel: PublicChannel }
-  | { kind: "match"; match: PublicMatch; streamId: string };
+  | { kind: "match"; match: PublicMatch };
 
 function Home() {
-  const { channels: initChannels, matches: initMatches } = Route.useLoaderData();
+  const { channels: initChannels, matches: initMatches, settings: initSettings } =
+    Route.useLoaderData();
   const refetchCh = useServerFn(listChannels);
   const refetchMa = useServerFn(listMatches);
+  const refetchSettings = useServerFn(getSiteSettings);
   const fetchSources = useServerFn(listChannelSources);
 
   const [channels, setChannels] = useState<PublicChannel[]>(initChannels);
   const [matches, setMatches] = useState<PublicMatch[]>(initMatches);
-  const [mode, setMode] = useState<Mode | null>(
-    initChannels[0] ? { kind: "channel", channel: initChannels[0] } : null,
-  );
+  const [marquee, setMarquee] = useState<string>(initSettings.marquee_text);
+  const [mode, setMode] = useState<Mode | null>(null);
   const [sources, setSources] = useState<PublicSource[]>([]);
   const playerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (mode?.kind !== "channel" || !mode.channel.id) { setSources([]); return; }
+    if (mode?.kind !== "channel") { setSources([]); return; }
     const chId = mode.channel.id;
     let cancelled = false;
     fetchSources({ data: { channelId: chId } })
-      .then((r) => { if (!cancelled) setSources(r); })
-      .catch(() => { if (!cancelled) setSources([]); });
+      .then((r) => !cancelled && setSources(r))
+      .catch(() => !cancelled && setSources([]));
     return () => { cancelled = true; };
   }, [mode, fetchSources]);
 
   useEffect(() => {
     const t = setInterval(async () => {
       try {
-        const [c, m] = await Promise.all([refetchCh(), refetchMa()]);
-        setChannels(c);
-        setMatches(m);
+        const [c, m, s] = await Promise.all([refetchCh(), refetchMa(), refetchSettings()]);
+        setChannels(c); setMatches(m); setMarquee(s.marquee_text);
       } catch { /* ignore */ }
     }, 20000);
     return () => clearInterval(t);
-  }, [refetchCh, refetchMa]);
+  }, [refetchCh, refetchMa, refetchSettings]);
 
   const scrollToPlayer = () => {
     playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
-
-  const pickChannel = (c: PublicChannel) => {
-    setMode({ kind: "channel", channel: c });
-    scrollToPlayer();
-  };
-  const pickMatch = (m: PublicMatch, streamId: string) => {
-    setMode({ kind: "match", match: m, streamId });
-    scrollToPlayer();
-  };
-
-  const isMatch = mode?.kind === "match";
-  const playerChannelId = isMatch ? mode.match.id : mode?.kind === "channel" ? mode.channel.id : null;
-  const playerName = isMatch
-    ? `${mode.match.team_a ?? ""} vs ${mode.match.team_b ?? ""}`.trim() || mode.match.title
-    : mode?.kind === "channel" ? mode.channel.name : "";
+  const pickChannel = (c: PublicChannel) => { setMode({ kind: "channel", channel: c }); scrollToPlayer(); };
+  const pickMatch = (m: PublicMatch) => { setMode({ kind: "match", match: m }); scrollToPlayer(); };
+  const close = () => setMode(null);
 
   return (
     <div className="mx-auto max-w-7xl px-3 py-4 sm:px-5 sm:py-6">
@@ -110,39 +102,37 @@ function Home() {
             </div>
           </div>
         </a>
-        <div className="flex items-center gap-2">
-          <span className="hidden items-center gap-1.5 rounded-full bg-[var(--surface)] px-3 py-1 text-xs sm:flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-[var(--live)] live-pulse" />
-            LIVE NOW
-          </span>
-        </div>
+        <span className="hidden items-center gap-1.5 rounded-full bg-[var(--surface)] px-3 py-1 text-xs sm:flex">
+          <span className="h-1.5 w-1.5 rounded-full bg-[var(--live)] live-pulse" />
+          LIVE NOW
+        </span>
       </header>
 
       <h1 className="sr-only">FlashSports HD — Live Television Streaming</h1>
 
-      <div className="mb-4">
-        <LiveMatchHero matches={matches} onWatchMatch={pickMatch} />
-      </div>
-
       <div ref={playerRef} className="mb-4">
-        <Player
-          channelId={playerChannelId}
-          channelName={playerName}
-          sources={isMatch ? [] : sources}
-          matchStreamId={isMatch ? mode.streamId : null}
-        />
+        {mode?.kind === "match" ? (
+          <MatchPlayerView match={mode.match} marqueeText={marquee} onClose={close} />
+        ) : mode?.kind === "channel" ? (
+          <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
+            <div className="flex items-center justify-between border-b border-[var(--border)] bg-black/40 px-4 py-2">
+              <div className="text-sm font-semibold">{mode.channel.name}</div>
+              <button onClick={close} className="rounded-md border border-[var(--border)] px-2.5 py-1 text-xs hover:bg-[var(--surface-elevated)]">✕ Close</button>
+            </div>
+            <Player
+              channelId={mode.channel.id}
+              channelName={mode.channel.name}
+              sources={sources}
+            />
+          </div>
+        ) : null}
       </div>
 
-      <MatchSchedule
+      <WorldCupSection
         matches={matches}
-        channels={channels}
-        onPlay={(id) => {
-          const c = channels.find((x) => x.id === id);
-          if (c) pickChannel(c);
-        }}
+        activeMatchId={mode?.kind === "match" ? mode.match.id : null}
+        onPickMatch={pickMatch}
       />
-
-      <WorldCupSection />
 
       <ChannelGrid
         channels={channels}

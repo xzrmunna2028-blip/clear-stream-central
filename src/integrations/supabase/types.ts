@@ -223,18 +223,21 @@ export type Database = {
           id: boolean
           maintenance_message: string
           maintenance_mode: boolean
+          marquee_text: string
           updated_at: string
         }
         Insert: {
           id?: boolean
           maintenance_message?: string
           maintenance_mode?: boolean
+          marquee_text?: string
           updated_at?: string
         }
         Update: {
           id?: boolean
           maintenance_message?: string
           maintenance_mode?: boolean
+          marquee_text?: string
           updated_at?: string
         }
         Relationships: []
