@@ -143,7 +143,7 @@ export function MatchPlayerView({ match, marqueeText, onClose }: Props) {
             </div>
           </div>
           <div className="overflow-hidden border-t border-[var(--border)] bg-black/60 py-2">
-            <div className="marquee whitespace-nowrap text-sm font-medium text-yellow-300">
+            <div className="marquee-scroll whitespace-nowrap text-sm font-medium text-yellow-300">
               {marqueeText || "Stay tuned — the action begins soon."}
             </div>
           </div>
