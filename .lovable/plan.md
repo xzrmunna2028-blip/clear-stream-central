@@ -1,52 +1,45 @@
-## What's broken (root cause)
+## Goal
+Restructure the home page around admin-managed matches. Each match owns its team flags, status, scheduled time, server list (M3U), and an optional "Coming Soon" promo. Tabs filter by status. Live matches open the player with server pills; upcoming matches open the promo video + marquee.
 
-`src/routes/api/stream/$id/playlist[.]m3u8.ts` runs a silent **fallback** (`fetchFallbackPlaylist`) — if your newly added M3U fails one 3-second fetch, it picks another channel in the same category and plays its stream instead. That's exactly why every new channel ends up showing T-Sport. We will **remove the silent fallback** so each channel only ever plays its own URL (and shows a clear "stream unavailable" message if the URL is bad).
+## UI Changes
 
-## Plan
+**Home (`src/routes/index.tsx`)**
+- Remove the `LiveMatchHero` floating card and the standalone `MatchSchedule` row.
+- Keep header + player area, but the player only mounts when the user picks a match/channel.
+- Promote `WorldCupSection` to the primary list. Replace its empty state with admin matches when API has none, and merge admin matches into the same grid so everything (live/upcoming/completed) shows here.
 
-### 1. Streaming bug fixes
-- Remove auto-fallback from `playlist.m3u8.ts`. Each channel plays only the URL admin entered.
-- Raise per-attempt timeout to 6s and do 2 attempts before giving up.
-- Player overlay shows "This stream is currently offline — try another source" instead of silently switching.
-- Strip URL trimming / whitespace on save in admin so pasted M3U links work first try.
+**Match card (in `WorldCupSection`)**
+- Flag chip next to each team name (use `team_a_iso` / `team_b_iso` → `https://flagcdn.com/w40/{iso}.png`).
+- Date + time row.
+- Corner badge: red pulsing "LIVE" when `is_live`, gold "UPCOMING", grey "COMPLETED".
+- Click → opens player view inline.
 
-### 2. Player polish
-- Start **unmuted** by default. Browsers block autoplay-with-sound on some, so: if blocked, autoplay muted and show a one-tap "Tap to unmute · 🔊" overlay (instead of permanently muted).
-- Working **Settings → Quality** menu: Auto, 4K, 1440p, 1080p, 720p, 480p, 360p (only show levels the stream actually has; otherwise show "only Auto available").
-- Keep gesture controls; add a small bottom bar (play/pause, mute, quality, fullscreen, rotate).
+**Player view**
+- Live match → `Player` with server pills (from `match_streams`); first stream auto-plays, click another pill to switch.
+- Upcoming match → render `<video>` with `hero_media.video_url` (first active) + marquee text below.
+- Completed → show "Match ended" panel.
 
-### 3. Live Match Hero (auto flags + click-to-watch)
-- New section at the top: when any World Cup match is **LIVE**, show a big card — Country A flag · `VS` · Country B flag, score, minute, "Tap to Watch" CTA.
-- Click → opens player with the stream admin assigned to that match.
-- Flags auto-resolve from team name (use Country flag CDN — e.g. `flagcdn.com/w160/{iso}.png`, plus a name→ISO map for the 48 World Cup nations). No manual upload needed.
-- When **no match is live**, the card shows the admin-uploaded **"Coming Soon" video** (looping, muted) with overlay text — users still see something engaging.
+**Tabs (Live / Today / Upcoming / Recent / Completed / All)**
+- Compute bucket per admin match using `is_live` + `start_time` (today = same calendar day; recent = last 24h ended; completed = past + not live).
+- WorldCup API matches keep their existing bucket logic; merge both sources in each tab.
 
-### 4. Match → stream binding (admin)
-- New table `match_streams(match_id, label, stream_url, sort_order, is_active)` — unlimited M3U links per match.
-- Admin Matches tab gets:
-  - Team A / Team B (country dropdown auto-populates flag preview)
-  - League, Kickoff, "Mark Live" toggle
-  - **Sources** sub-modal: paste any number of M3U/HLS URLs with labels (SP-1, SP-2, …)
-- Public Live Hero uses the first active source; player tabs let user switch.
+## Backend / Schema
 
-### 5. Coming-Soon gallery (admin)
-- New table `hero_media(id, title, video_url, poster_url, is_active, sort_order)`.
-- Admin "Hero Media" tab: add unlimited promo videos (mp4/HLS URL or upload via storage).
-- When nothing is live, the hero rotates through active media.
+- `site_settings`: add `marquee_text TEXT NOT NULL DEFAULT ''` (editable in admin Settings tab).
+- Existing tables already cover the rest: `matches` (teams, ISOs, start_time, is_live), `match_streams` (server name + M3U), `hero_media` (promo video).
+- Add `getMarqueeText` to `site-settings.functions.ts` and admin setter.
+- Add public `listMatchStreamsForMatch(matchId)` and `listHeroMedia()` (already exist as `listMatchStreams` / `listHeroMedia` — reuse).
 
-### 6. Channel grid polish
-- Logo box becomes square with `object-contain` + soft white pad so any logo (wide or square) shows fully without cropping.
-- Bigger touch targets, brand-color highlight on active card.
+## Admin Panel
+Already supports matches CRUD, per-match streams modal, hero media tab, settings. Add marquee text field to Settings tab.
 
-### 7. Admin upcoming-match editor (the empty "No matches" state)
-- Inline "+ Add Match" button right inside the home section when admin is signed in.
-- Same form as Admin → Matches, but in a modal — type two country names, see flag preview live, save, and it appears instantly on the home page.
+## Files Touched
+- `src/routes/index.tsx` — remove hero/schedule, wire match→player.
+- `src/components/WorldCupSection.tsx` — merge admin matches, new card design w/ flags + status badges + click handler.
+- New `src/components/MatchPlayerView.tsx` — player + server pills OR promo video + marquee.
+- `src/lib/site-settings.functions.ts` — marquee getter/setter.
+- `src/routes/admin.tsx` — marquee input in Settings tab.
+- Migration: add `marquee_text` column.
 
-## Technical notes (for reference)
-
-- DB: 2 new tables (`match_streams`, `hero_media`) with grants + RLS (anon SELECT on `match_streams.label/id`, full admin CRUD via server functions).
-- Server fns: `listLiveHeroMatch`, `listMatchSources`, `listHeroMedia`, plus admin equivalents.
-- New files: `src/components/LiveMatchHero.tsx`, `src/components/FlagBadge.tsx`, `src/lib/countries.ts` (name→ISO map for 48 WC nations), `src/lib/hero.functions.ts`, `src/lib/match-streams.functions.ts`.
-- Player: update `src/components/Player.tsx` — unmute-by-default + quality menu binding to `hls.levels`.
-
-Approve this and I'll implement in one pass.
+## Out of Scope
+Player internals (HLS, gestures, quality) — already built and unchanged.
