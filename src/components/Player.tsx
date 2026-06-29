@@ -13,7 +13,18 @@ type Props = {
 
 type Quality = { index: number; height: number; bitrate: number };
 
-export function Player({ channelId, channelName, sources = [], matchStreamId = null }: Props) {
+// Resolution presets — used to label closest available HLS level.
+const PRESETS: Array<{ key: string; label: string; badge?: string; minH: number }> = [
+  { key: "8k", label: "8K HD", badge: "8K", minH: 4320 },
+  { key: "4k", label: "4K Ultra", badge: "4K", minH: 2160 },
+  { key: "1440", label: "1440p QHD", badge: "QHD", minH: 1440 },
+  { key: "1080", label: "1080p Full HD", badge: "FHD", minH: 1080 },
+  { key: "720", label: "720p HD", badge: "HD", minH: 720 },
+  { key: "480", label: "480p", minH: 480 },
+  { key: "360", label: "360p", minH: 360 },
+];
+
+export function Player({ channelId, sources = [], matchStreamId = null }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -29,8 +40,13 @@ export function Player({ channelId, channelName, sources = [], matchStreamId = n
   const [needsUnmute, setNeedsUnmute] = useState(false);
   const [offline, setOffline] = useState(false);
 
+  // Pinch-zoom state
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+
   useEffect(() => {
     setCurrentSourceId(sources[0]?.id ?? null);
+    setZoom(1); setPan({ x: 0, y: 0 });
   }, [channelId, sources]);
 
   const showOverlay = useCallback((text: string) => {
@@ -60,7 +76,6 @@ export function Player({ channelId, channelName, sources = [], matchStreamId = n
     const tryAutoplay = () => {
       video.muted = false;
       video.play().catch(() => {
-        // Browser blocked autoplay-with-sound — fall back to muted + tap-to-unmute prompt.
         video.muted = true;
         video.play().catch(() => {});
         setNeedsUnmute(true);
@@ -71,16 +86,24 @@ export function Player({ channelId, channelName, sources = [], matchStreamId = n
       const hls = new Hls({
         startLevel: -1,
         autoStartLoad: true,
-        lowLatencyMode: false,
-        backBufferLength: 15,
-        maxBufferLength: 20,
-        maxMaxBufferLength: 40,
-        maxBufferSize: 30 * 1000 * 1000,
-        manifestLoadingMaxRetry: 4,
-        levelLoadingMaxRetry: 4,
-        fragLoadingMaxRetry: 6,
+        lowLatencyMode: true,
+        backBufferLength: 10,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        maxBufferSize: 60 * 1000 * 1000,
+        maxBufferHole: 0.5,
+        highBufferWatchdogPeriod: 1,
+        nudgeMaxRetry: 10,
+        manifestLoadingMaxRetry: 6,
+        levelLoadingMaxRetry: 6,
+        fragLoadingMaxRetry: 8,
+        fragLoadingRetryDelay: 500,
+        levelLoadingRetryDelay: 500,
+        manifestLoadingRetryDelay: 500,
         enableWorker: true,
         progressive: true,
+        testBandwidth: true,
+        abrEwmaDefaultEstimate: 1_500_000,
       });
       hlsRef.current = hls;
       hls.loadSource(src);
@@ -135,7 +158,7 @@ export function Player({ channelId, channelName, sources = [], matchStreamId = n
     };
   }, [channelId, currentSourceId, matchStreamId]);
 
-  // Gesture handlers
+  // Touch gestures: swipe (vol/brightness) + pinch-to-zoom
   useEffect(() => {
     const el = containerRef.current;
     const video = videoRef.current;
@@ -145,12 +168,37 @@ export function Player({ channelId, channelName, sources = [], matchStreamId = n
     let startX = 0;
     let startVol = video.volume;
     let startBri = brightness;
-    let mode: "volume" | "brightness" | null = null;
-    let active = false;
+    let startZoom = zoom;
+    let startPan = pan;
+    let startDist = 0;
+    let mode: "volume" | "brightness" | "pinch" | null = null;
+    const pointers = new Map<number, PointerEvent>();
+
+    const dist = () => {
+      const pts = Array.from(pointers.values());
+      if (pts.length < 2) return 0;
+      const dx = pts[0].clientX - pts[1].clientX;
+      const dy = pts[0].clientY - pts[1].clientY;
+      return Math.hypot(dx, dy);
+    };
+    const center = () => {
+      const pts = Array.from(pointers.values());
+      return {
+        x: (pts[0].clientX + pts[1].clientX) / 2,
+        y: (pts[0].clientY + pts[1].clientY) / 2,
+      };
+    };
 
     const onStart = (e: PointerEvent) => {
       if ((e.target as HTMLElement).closest("[data-no-gesture]")) return;
-      active = true;
+      pointers.set(e.pointerId, e);
+      if (pointers.size === 2) {
+        mode = "pinch";
+        startDist = dist();
+        startZoom = zoom;
+        startPan = pan;
+        return;
+      }
       startY = e.clientY;
       startX = e.clientX;
       startVol = video.volume;
@@ -159,7 +207,21 @@ export function Player({ channelId, channelName, sources = [], matchStreamId = n
       mode = e.clientX - rect.left > rect.width / 2 ? "volume" : "brightness";
     };
     const onMove = (e: PointerEvent) => {
-      if (!active || !mode) return;
+      if (pointers.has(e.pointerId)) pointers.set(e.pointerId, e);
+      if (!mode) return;
+
+      if (mode === "pinch" && pointers.size >= 2) {
+        const d = dist();
+        if (startDist > 0) {
+          const scale = Math.max(1, Math.min(4, startZoom * (d / startDist)));
+          setZoom(scale);
+          if (scale <= 1.01) setPan({ x: 0, y: 0 });
+          showOverlay(`⛶ ${scale.toFixed(1)}×`);
+        }
+        return;
+      }
+
+      if (pointers.size > 1) return;
       const dy = startY - e.clientY;
       const dx = Math.abs(e.clientX - startX);
       if (Math.abs(dy) < 12 || dx > 60) return;
@@ -170,13 +232,19 @@ export function Player({ channelId, channelName, sources = [], matchStreamId = n
         video.volume = v;
         video.muted = v === 0;
         showOverlay(`🔊 ${Math.round(v * 100)}%`);
-      } else {
+      } else if (mode === "brightness") {
         const b = Math.max(0.2, Math.min(1.6, startBri + delta * 1.4));
         setBrightness(b);
         showOverlay(`☀ ${Math.round((b / 1.6) * 100)}%`);
       }
     };
-    const onEnd = () => { active = false; mode = null; };
+    const onEnd = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) {
+        if (mode === "pinch") mode = null;
+      }
+      if (pointers.size === 0) mode = null;
+    };
 
     el.addEventListener("pointerdown", onStart);
     window.addEventListener("pointermove", onMove);
@@ -188,7 +256,18 @@ export function Player({ channelId, channelName, sources = [], matchStreamId = n
       window.removeEventListener("pointerup", onEnd);
       window.removeEventListener("pointercancel", onEnd);
     };
-  }, [brightness, showOverlay]);
+  }, [brightness, zoom, pan, showOverlay]);
+
+  // Double-tap to reset zoom
+  const lastTapRef = useRef(0);
+  const handleVideoTap = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      setZoom(1); setPan({ x: 0, y: 0 });
+      showOverlay("⛶ 1.0×");
+    }
+    lastTapRef.current = now;
+  }, [showOverlay]);
 
   useEffect(() => {
     const onFs = () => {
@@ -208,19 +287,6 @@ export function Player({ channelId, channelName, sources = [], matchStreamId = n
     if (document.fullscreenElement) document.exitFullscreen();
     else el.requestFullscreen?.().catch(() => {});
   }, []);
-
-  const rotateScreen = useCallback(async () => {
-    const el = containerRef.current;
-    if (!el) return;
-    if (!document.fullscreenElement) { try { await el.requestFullscreen?.(); } catch {} }
-    const so: any = (screen as any).orientation;
-    if (!so?.lock) { showOverlay("Rotate not supported"); return; }
-    const isLandscape = so.type?.startsWith("landscape");
-    try {
-      await so.lock(isLandscape ? "portrait" : "landscape");
-      showOverlay(isLandscape ? "↻ Portrait" : "↻ Landscape");
-    } catch { showOverlay("Rotate blocked"); }
-  }, [showOverlay]);
 
   const togglePlay = useCallback(() => {
     const v = videoRef.current;
@@ -247,24 +313,23 @@ export function Player({ channelId, channelName, sources = [], matchStreamId = n
     setShowSettings(false);
   };
 
-  const fmtBitrate = (bps: number) => {
-    if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(2)} Mbps`;
-    return `${Math.round(bps / 1000)} kbps`;
-  };
-
-  const qBadge = (h: number) => {
-    if (h >= 2160) return { label: "4K", cls: "bg-red-600 text-white" };
-    if (h >= 1440) return { label: "QHD", cls: "bg-orange-500 text-white" };
-    if (h >= 720) return { label: "HD", cls: "bg-red-500 text-white" };
-    return null;
-  };
-
-  const sortedQ = [...qualities].sort((a, b) => b.height - a.height);
+  // Map presets to the best matching available HLS level (closest >= minH, else closest).
+  const presetRows = PRESETS.map((p) => {
+    let bestIdx = -1;
+    let bestDelta = Infinity;
+    qualities.forEach((q) => {
+      const delta = Math.abs((q.height || 0) - p.minH);
+      if (delta < bestDelta) { bestDelta = delta; bestIdx = q.index; }
+    });
+    const q = qualities.find((x) => x.index === bestIdx);
+    const available = !!q && q.height >= p.minH * 0.85;
+    return { ...p, levelIndex: bestIdx, available, real: q };
+  });
 
   return (
     <div
       ref={containerRef}
-      className="relative w-full overflow-hidden rounded-xl bg-black select-none aspect-video"
+      className="relative w-full overflow-hidden rounded-xl bg-black select-none aspect-video touch-none"
       style={{ filter: `brightness(${brightness})` }}
     >
       <video
@@ -272,40 +337,11 @@ export function Player({ channelId, channelName, sources = [], matchStreamId = n
         playsInline
         autoPlay
         controls={false}
-        onClick={togglePlay}
+        onClick={(e) => { handleVideoTap(); if ((e.detail ?? 1) === 1) togglePlay(); }}
         onDoubleClick={toggleFullscreen}
-        className="absolute inset-0 h-full w-full bg-black"
+        className="absolute inset-0 h-full w-full bg-black transition-transform duration-150 ease-out"
+        style={{ transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`, transformOrigin: "center center" }}
       />
-
-      {channelName && (
-        <div className="pointer-events-none absolute top-3 left-3 rounded-md bg-black/50 px-2 py-1 text-xs font-medium tracking-wide text-white backdrop-blur">
-          <span className="mr-2 inline-block h-2 w-2 rounded-full bg-[var(--live)] live-pulse" />
-          {channelName}
-        </div>
-      )}
-
-      {sources.length > 1 && !matchStreamId && (
-        <div
-          data-no-gesture
-          className="absolute left-1/2 top-12 z-10 flex max-w-[90%] -translate-x-1/2 gap-2 overflow-x-auto rounded-full bg-black/55 px-2 py-1.5 backdrop-blur ring-1 ring-white/10"
-          style={{ scrollbarWidth: "none" }}
-        >
-          {sources.map((s) => {
-            const active = currentSourceId === s.id;
-            return (
-              <button
-                key={s.id}
-                onClick={() => setCurrentSourceId(s.id)}
-                className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition ${
-                  active ? "bg-[var(--brand)] text-black" : "bg-white/10 text-white hover:bg-white/20"
-                }`}
-              >
-                {active && "✓ "}{s.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
 
       {loading && !offline && (
         <div className="pointer-events-none absolute inset-0 grid place-items-center">
@@ -318,9 +354,7 @@ export function Player({ channelId, channelName, sources = [], matchStreamId = n
           <div>
             <div className="text-3xl">📡</div>
             <div className="mt-2 text-base font-semibold text-white">This stream is offline</div>
-            <div className="mt-1 text-xs text-white/60">
-              Try another source or pick a different channel.
-            </div>
+            <div className="mt-1 text-xs text-white/60">Try another source or pick a different channel.</div>
           </div>
         </div>
       )}
@@ -341,16 +375,41 @@ export function Player({ channelId, channelName, sources = [], matchStreamId = n
         </div>
       )}
 
-      <div data-no-gesture className="absolute right-3 top-3 flex items-center gap-2">
-        <button onClick={rotateScreen} className="rounded-md bg-black/60 px-2 py-2 text-white backdrop-blur hover:bg-black/80" aria-label="Rotate" title="Rotate">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
-            <path d="M21 3v5h-5" />
+      {/* Source switcher kept tucked at top-center, hidden unless multiple sources */}
+      {sources.length > 1 && !matchStreamId && (
+        <div
+          data-no-gesture
+          className="absolute left-1/2 top-3 z-10 flex max-w-[90%] -translate-x-1/2 gap-2 overflow-x-auto rounded-full bg-black/55 px-2 py-1.5 backdrop-blur ring-1 ring-white/10"
+          style={{ scrollbarWidth: "none" }}
+        >
+          {sources.map((s) => {
+            const active = currentSourceId === s.id;
+            return (
+              <button
+                key={s.id}
+                onClick={() => setCurrentSourceId(s.id)}
+                className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  active ? "bg-[var(--brand)] text-black" : "bg-white/10 text-white hover:bg-white/20"
+                }`}
+              >
+                {active && "✓ "}{s.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Bottom-right controls */}
+      <div data-no-gesture className="absolute right-3 bottom-3 flex items-center gap-2">
+        <button
+          onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); showOverlay("⛶ 1.0×"); }}
+          className="rounded-md bg-black/60 px-2 py-2 text-white backdrop-blur hover:bg-black/80"
+          aria-label="Reset zoom" title="Reset zoom"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
           </svg>
         </button>
-      </div>
-
-      <div data-no-gesture className="absolute right-3 bottom-3 flex items-center gap-2">
         <button onClick={() => setShowSettings((s) => !s)} className="rounded-md bg-black/60 px-2 py-2 text-white backdrop-blur hover:bg-black/80" aria-label="Quality" title="Quality">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="3" />
@@ -371,7 +430,7 @@ export function Player({ channelId, channelName, sources = [], matchStreamId = n
       </div>
 
       {showSettings && (
-        <div data-no-gesture className="absolute right-3 bottom-16 w-72 rounded-xl bg-black/85 p-3 text-white shadow-2xl backdrop-blur ring-1 ring-white/10">
+        <div data-no-gesture className="absolute right-3 bottom-16 w-72 rounded-xl bg-black/90 p-3 text-white shadow-2xl backdrop-blur ring-1 ring-white/10">
           <div className="mb-2 text-center text-sm font-semibold">Quality</div>
           <div className="max-h-80 overflow-y-auto space-y-1">
             <button
@@ -381,28 +440,37 @@ export function Player({ channelId, channelName, sources = [], matchStreamId = n
               <span>Auto</span>
               <span className="text-xs opacity-70">Recommended</span>
             </button>
-            {sortedQ.length === 0 && (
-              <div className="px-2 py-3 text-center text-xs text-white/50">Only Auto available for this stream</div>
-            )}
-            {sortedQ.map((q) => {
-              const badge = qBadge(q.height);
-              const active = currentLevel === q.index;
+            {presetRows.map((p) => {
+              const active = currentLevel === p.levelIndex && p.available;
               return (
                 <button
-                  key={q.index}
-                  onClick={() => pickQuality(q.index)}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${active ? "bg-white/15" : "hover:bg-white/10"}`}
+                  key={p.key}
+                  disabled={!p.available}
+                  onClick={() => p.available && pickQuality(p.levelIndex)}
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
+                    active ? "bg-white/15" : p.available ? "hover:bg-white/10" : "opacity-40 cursor-not-allowed"
+                  }`}
                 >
                   <span className="flex items-center gap-2 font-semibold">
-                    {q.height > 0 ? `${q.height}p` : "Unknown"}
-                    {badge && (
-                      <span className={`rounded px-1.5 py-[1px] text-[10px] font-bold ${badge.cls}`}>{badge.label}</span>
+                    {p.label}
+                    {p.badge && (
+                      <span className={`rounded px-1.5 py-[1px] text-[10px] font-bold ${
+                        p.key === "8k" ? "bg-purple-600 text-white" :
+                        p.key === "4k" ? "bg-red-600 text-white" :
+                        p.key === "1440" ? "bg-orange-500 text-white" :
+                        "bg-emerald-600 text-white"
+                      }`}>{p.badge}</span>
                     )}
                   </span>
-                  <span className="text-xs text-white/70">{fmtBitrate(q.bitrate)}</span>
+                  <span className="text-xs text-white/60">
+                    {p.available ? `${p.real?.height}p` : "N/A"}
+                  </span>
                 </button>
               );
             })}
+          </div>
+          <div className="mt-2 text-[10px] text-white/40 text-center">
+            Stream provides what's listed. "N/A" means the source does not offer that resolution.
           </div>
         </div>
       )}
