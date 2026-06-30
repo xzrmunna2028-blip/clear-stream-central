@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { listWorldCupFixtures, type WCFixture } from "@/lib/worldcup.functions";
 import { flagUrl, isoForCountry } from "@/lib/countries";
 import type { PublicMatch } from "@/lib/channels.functions";
+import { formatMatchShortDateTime, isSameMatchDay } from "@/lib/date-format";
 
 const BUCKETS = [
   { id: "live", label: "Live" },
@@ -17,57 +18,32 @@ type BucketId = (typeof BUCKETS)[number]["id"];
 const LIVE_SHORT = new Set(["1H", "2H", "HT", "ET", "BT", "P", "LIVE"]);
 const FINISHED_SHORT = new Set(["FT", "AET", "PEN"]);
 
-function fmt(d: string) {
-  return new Date(d).toLocaleString(undefined, {
-    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-  });
-}
-
 type Status = "live" | "upcoming" | "completed";
 
-function adminBucket(m: PublicMatch): Status {
+function adminBucketAt(m: PublicMatch, nowMs: number): Status {
   if (m.is_live) return "live";
   const t = new Date(m.start_time).getTime();
-  // ~3h grace after start → completed
-  if (t + 3 * 60 * 60 * 1000 < Date.now()) return "completed";
+  if (t + 3 * 60 * 60 * 1000 < nowMs) return "completed";
   return "upcoming";
 }
 
 function isToday(iso: string) {
-  const d = new Date(iso);
-  const n = new Date();
-  return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
-}
-
-function adminMatches(matches: PublicMatch[], b: BucketId): PublicMatch[] {
-  const list = matches.slice();
-  switch (b) {
-    case "live": return list.filter((m) => adminBucket(m) === "live");
-    case "today": return list.filter((m) => isToday(m.start_time));
-    case "upcoming":
-      return list.filter((m) => adminBucket(m) === "upcoming")
-        .sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time));
-    case "recent":
-    case "completed":
-      return list.filter((m) => adminBucket(m) === "completed")
-        .sort((a, b) => +new Date(b.start_time) - +new Date(a.start_time));
-    case "all":
-    default:
-      return list.sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time));
-  }
+  return isSameMatchDay(iso);
 }
 
 type Props = {
   matches: PublicMatch[];
   activeMatchId: string | null;
+  nowMs: number;
   onPickMatch: (m: PublicMatch) => void;
 };
 
-export function WorldCupSection({ matches, activeMatchId, onPickMatch }: Props) {
+export function WorldCupSection({ matches, activeMatchId, nowMs, onPickMatch }: Props) {
   const fetchFn = useServerFn(listWorldCupFixtures);
   const [bucket, setBucket] = useState<BucketId>("live");
   const [items, setItems] = useState<WCFixture[]>([]);
   const [loading, setLoading] = useState(true);
+  const [clock, setClock] = useState(nowMs);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,8 +58,13 @@ export function WorldCupSection({ matches, activeMatchId, onPickMatch }: Props) 
     return () => { cancelled = true; clearInterval(t); };
   }, [bucket, fetchFn]);
 
-  const admin = useMemo(() => adminMatches(matches, bucket), [matches, bucket]);
-  const liveAdminCount = useMemo(() => matches.filter((m) => adminBucket(m) === "live").length, [matches]);
+  useEffect(() => {
+    const t = setInterval(() => setClock(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const admin = useMemo(() => adminMatchesAt(matches, bucket, clock), [matches, bucket, clock]);
+  const liveAdminCount = useMemo(() => matches.filter((m) => adminBucketAt(m, clock) === "live").length, [matches, clock]);
 
   return (
     <section aria-label="FIFA World Cup 2026" className="mb-6">
@@ -135,7 +116,7 @@ export function WorldCupSection({ matches, activeMatchId, onPickMatch }: Props) 
             <AdminMatchCard
               key={`a-${m.id}`}
               match={m}
-              status={adminBucket(m)}
+              status={adminBucketAt(m, clock)}
               active={activeMatchId === m.id}
               onClick={() => onPickMatch(m)}
             />
@@ -145,6 +126,24 @@ export function WorldCupSection({ matches, activeMatchId, onPickMatch }: Props) 
       )}
     </section>
   );
+}
+
+function adminMatchesAt(matches: PublicMatch[], b: BucketId, nowMs: number): PublicMatch[] {
+  const list = matches.slice();
+  switch (b) {
+    case "live": return list.filter((m) => adminBucketAt(m, nowMs) === "live");
+    case "today": return list.filter((m) => isToday(m.start_time));
+    case "upcoming":
+      return list.filter((m) => adminBucketAt(m, nowMs) === "upcoming")
+        .sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time));
+    case "recent":
+    case "completed":
+      return list.filter((m) => adminBucketAt(m, nowMs) === "completed")
+        .sort((a, b) => +new Date(b.start_time) - +new Date(a.start_time));
+    case "all":
+    default:
+      return list.sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time));
+  }
 }
 
 function AdminMatchCard({
@@ -182,7 +181,7 @@ function AdminMatchCard({
       <div className="my-1 ml-12 text-[10px] text-[var(--muted-foreground)]">vs</div>
       <TeamLine name={match.team_b} iso={isoB} />
       <div className="mt-2 flex items-center justify-between text-[10px] text-[var(--muted-foreground)]">
-        <span>📅 {fmt(match.start_time)}</span>
+        <span>📅 {formatMatchShortDateTime(match.start_time)}</span>
         <span className="font-bold text-[var(--brand)] opacity-0 transition group-hover:opacity-100">▶ Watch</span>
       </div>
     </button>
@@ -222,7 +221,7 @@ function ApiMatchCard({ match }: { match: WCFixture }) {
       <TeamApiRow name={match.home.name} logo={match.home.logo} goals={match.goalsHome} />
       <div className="my-1 ml-12 text-[10px] text-[var(--muted-foreground)]">vs</div>
       <TeamApiRow name={match.away.name} logo={match.away.logo} goals={match.goalsAway} />
-      <div className="mt-2 text-[10px] text-[var(--muted-foreground)]">📅 {fmt(match.date)}</div>
+      <div className="mt-2 text-[10px] text-[var(--muted-foreground)]">📅 {formatMatchShortDateTime(match.date)}</div>
     </article>
   );
 }

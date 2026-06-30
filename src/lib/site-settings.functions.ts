@@ -10,18 +10,27 @@ export type SiteSettings = {
 
 export const getSiteSettings = createServerFn({ method: "GET" }).handler(
   async (): Promise<SiteSettings> => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin
-      .from("site_settings")
-      .select("maintenance_mode,maintenance_message,marquee_text")
-      .eq("id", true)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return {
-      maintenance_mode: !!data?.maintenance_mode,
-      maintenance_message: data?.maintenance_message ?? "",
-      marquee_text: (data as { marquee_text?: string } | null)?.marquee_text ?? "",
-    };
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data, error } = await supabaseAdmin
+        .from("site_settings")
+        .select("maintenance_mode,maintenance_message,marquee_text")
+        .eq("id", true)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return {
+        maintenance_mode: !!data?.maintenance_mode,
+        maintenance_message: data?.maintenance_message ?? "",
+        marquee_text: (data as { marquee_text?: string } | null)?.marquee_text ?? "",
+      };
+    } catch (error) {
+      console.error("[public] getSiteSettings failed", error);
+      return {
+        maintenance_mode: false,
+        maintenance_message: "",
+        marquee_text: "Stay tuned — live sports updates are coming soon.",
+      };
+    }
   },
 );
 

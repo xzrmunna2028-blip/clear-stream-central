@@ -34,12 +34,17 @@ export const Route = createFileRoute("/")({
     ],
   }),
   loader: async () => {
-    const [channels, matches, settings] = await Promise.all([
+    const [channelsResult, matchesResult, settingsResult] = await Promise.allSettled([
       listChannels(),
       listMatches(),
       getSiteSettings(),
     ]);
-    return { channels, matches, settings };
+    const channels = channelsResult.status === "fulfilled" ? channelsResult.value : [];
+    const matches = matchesResult.status === "fulfilled" ? matchesResult.value : [];
+    const settings = settingsResult.status === "fulfilled"
+      ? settingsResult.value
+      : { maintenance_mode: false, maintenance_message: "", marquee_text: "" };
+    return { channels, matches, settings, renderedAt: Date.now() };
   },
   component: Home,
 });
@@ -49,7 +54,7 @@ type Mode =
   | { kind: "match"; match: PublicMatch };
 
 function Home() {
-  const { channels: initChannels, matches: initMatches, settings: initSettings } =
+  const { channels: initChannels, matches: initMatches, settings: initSettings, renderedAt } =
     Route.useLoaderData();
   const refetchCh = useServerFn(listChannels);
   const refetchMa = useServerFn(listMatches);
@@ -112,7 +117,7 @@ function Home() {
 
       <div ref={playerRef} className="mb-4">
         {mode?.kind === "match" ? (
-          <MatchPlayerView match={mode.match} marqueeText={marquee} onClose={close} />
+          <MatchPlayerView match={mode.match} marqueeText={marquee} nowMs={renderedAt} onClose={close} />
         ) : mode?.kind === "channel" ? (
           <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
             <div className="flex items-center justify-between border-b border-[var(--border)] bg-black/40 px-4 py-2">
@@ -131,6 +136,7 @@ function Home() {
       <WorldCupSection
         matches={matches}
         activeMatchId={mode?.kind === "match" ? mode.match.id : null}
+        nowMs={renderedAt}
         onPickMatch={pickMatch}
       />
 
@@ -141,7 +147,7 @@ function Home() {
       />
 
       <footer className="mt-10 border-t border-[var(--border)] pt-4 text-center text-xs text-[var(--muted-foreground)]">
-        © {new Date().getFullYear()} FlashSports HD · Built for fans
+        © 2026 FlashSports HD · Built for fans
       </footer>
     </div>
   );
