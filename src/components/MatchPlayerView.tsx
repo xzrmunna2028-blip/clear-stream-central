@@ -14,19 +14,25 @@ import { formatMatchDateTime } from "@/lib/date-format";
 type Props = {
   match: PublicMatch;
   marqueeText: string;
+  nowMs: number;
   onClose: () => void;
 };
 
-export function MatchPlayerView({ match, marqueeText, onClose }: Props) {
+export function MatchPlayerView({ match, marqueeText, nowMs, onClose }: Props) {
   const fetchStreams = useServerFn(listMatchStreams);
   const fetchHero = useServerFn(listHeroMedia);
   const [streams, setStreams] = useState<PublicMatchStream[]>([]);
   const [hero, setHero] = useState<PublicHeroMedia[]>([]);
   const [activeStream, setActiveStream] = useState<string | null>(null);
+  const [clock, setClock] = useState(nowMs);
 
-  const now = Date.now();
-  const isCompleted = !match.is_live && new Date(match.start_time).getTime() + 3 * 60 * 60 * 1000 < now;
+  const isCompleted = !match.is_live && new Date(match.start_time).getTime() + 3 * 60 * 60 * 1000 < clock;
   const isUpcoming = !match.is_live && !isCompleted;
+
+  useEffect(() => {
+    const t = setInterval(() => setClock(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     let c = false;

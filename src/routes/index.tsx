@@ -117,7 +117,7 @@ function Home() {
 
       <div ref={playerRef} className="mb-4">
         {mode?.kind === "match" ? (
-          <MatchPlayerView match={mode.match} marqueeText={marquee} onClose={close} />
+          <MatchPlayerView match={mode.match} marqueeText={marquee} nowMs={renderedAt} onClose={close} />
         ) : mode?.kind === "channel" ? (
           <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
             <div className="flex items-center justify-between border-b border-[var(--border)] bg-black/40 px-4 py-2">

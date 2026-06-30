@@ -20,14 +20,6 @@ const FINISHED_SHORT = new Set(["FT", "AET", "PEN"]);
 
 type Status = "live" | "upcoming" | "completed";
 
-function adminBucket(m: PublicMatch): Status {
-  if (m.is_live) return "live";
-  const t = new Date(m.start_time).getTime();
-  // ~3h grace after start → completed
-  if (t + 3 * 60 * 60 * 1000 < Date.now()) return "completed";
-  return "upcoming";
-}
-
 function adminBucketAt(m: PublicMatch, nowMs: number): Status {
   if (m.is_live) return "live";
   const t = new Date(m.start_time).getTime();
@@ -37,24 +29,6 @@ function adminBucketAt(m: PublicMatch, nowMs: number): Status {
 
 function isToday(iso: string) {
   return isSameMatchDay(iso);
-}
-
-function adminMatches(matches: PublicMatch[], b: BucketId): PublicMatch[] {
-  const list = matches.slice();
-  switch (b) {
-    case "live": return list.filter((m) => adminBucket(m) === "live");
-    case "today": return list.filter((m) => isToday(m.start_time));
-    case "upcoming":
-      return list.filter((m) => adminBucket(m) === "upcoming")
-        .sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time));
-    case "recent":
-    case "completed":
-      return list.filter((m) => adminBucket(m) === "completed")
-        .sort((a, b) => +new Date(b.start_time) - +new Date(a.start_time));
-    case "all":
-    default:
-      return list.sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time));
-  }
 }
 
 type Props = {
