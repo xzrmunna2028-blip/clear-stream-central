@@ -8,6 +8,7 @@ import {
   type PublicHeroMedia,
 } from "@/lib/channels.functions";
 import { flagUrl, isoForCountry } from "@/lib/countries";
+import { formatMatchDateTime } from "@/lib/date-format";
 
 type Props = {
   matches: PublicMatch[];
@@ -212,7 +213,7 @@ function ComingSoonCard({ hero, upcoming }: { hero?: PublicHeroMedia; upcoming: 
               {upcoming.map((m) => (
                 <div key={m.id} className="rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium text-white/90 backdrop-blur">
                   {m.team_a && m.team_b ? `${m.team_a} vs ${m.team_b}` : m.title}
-                  <span className="ml-1.5 opacity-70">· {new Date(m.start_time).toLocaleString([], { hour: "2-digit", minute: "2-digit", weekday: "short" })}</span>
+                  <span className="ml-1.5 opacity-70">· {formatMatchDateTime(m.start_time, true)}</span>
                 </div>
               ))}
             </div>

@@ -34,11 +34,16 @@ export const Route = createFileRoute("/")({
     ],
   }),
   loader: async () => {
-    const [channels, matches, settings] = await Promise.all([
+    const [channelsResult, matchesResult, settingsResult] = await Promise.allSettled([
       listChannels(),
       listMatches(),
       getSiteSettings(),
     ]);
+    const channels = channelsResult.status === "fulfilled" ? channelsResult.value : [];
+    const matches = matchesResult.status === "fulfilled" ? matchesResult.value : [];
+    const settings = settingsResult.status === "fulfilled"
+      ? settingsResult.value
+      : { maintenance_mode: false, maintenance_message: "", marquee_text: "" };
     return { channels, matches, settings };
   },
   component: Home,
@@ -141,7 +146,7 @@ function Home() {
       />
 
       <footer className="mt-10 border-t border-[var(--border)] pt-4 text-center text-xs text-[var(--muted-foreground)]">
-        © {new Date().getFullYear()} FlashSports HD · Built for fans
+        © 2026 FlashSports HD · Built for fans
       </footer>
     </div>
   );

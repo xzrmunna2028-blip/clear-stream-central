@@ -9,6 +9,7 @@ import {
 } from "@/lib/channels.functions";
 import { Player } from "@/components/Player";
 import { flagUrl, isoForCountry } from "@/lib/countries";
+import { formatMatchDateTime } from "@/lib/date-format";
 
 type Props = {
   match: PublicMatch;
@@ -135,10 +136,7 @@ export function MatchPlayerView({ match, marqueeText, onClose }: Props) {
             <div className="absolute bottom-3 left-4 right-4">
               <div className="text-xs font-semibold uppercase tracking-widest text-yellow-300">⏱ Starts</div>
               <div className="text-sm font-bold text-white">
-                {new Date(match.start_time).toLocaleString(undefined, {
-                  weekday: "short", month: "short", day: "numeric",
-                  hour: "2-digit", minute: "2-digit",
-                })}
+                {formatMatchDateTime(match.start_time, true)}
               </div>
             </div>
           </div>

@@ -1,4 +1,5 @@
 import type { PublicMatch, PublicChannel } from "@/lib/channels.functions";
+import { formatMatchShortDateTime } from "@/lib/date-format";
 
 type Props = {
   matches: PublicMatch[];
@@ -18,7 +19,6 @@ export function MatchSchedule({ matches, channels, onPlay }: Props) {
       <div className="flex gap-2 overflow-x-auto pb-2">
         {matches.map((m) => {
           const ch = m.channel_id ? chMap.get(m.channel_id) : null;
-          const t = new Date(m.start_time);
           return (
             <button
               key={m.id}
@@ -37,12 +37,7 @@ export function MatchSchedule({ matches, channels, onPlay }: Props) {
                   </span>
                 ) : (
                   <span className="text-[10px] text-[var(--muted-foreground)]">
-                    {t.toLocaleString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {formatMatchShortDateTime(m.start_time)}
                   </span>
                 )}
               </div>
