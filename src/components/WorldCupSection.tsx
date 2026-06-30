@@ -28,6 +28,13 @@ function adminBucket(m: PublicMatch): Status {
   return "upcoming";
 }
 
+function adminBucketAt(m: PublicMatch, nowMs: number): Status {
+  if (m.is_live) return "live";
+  const t = new Date(m.start_time).getTime();
+  if (t + 3 * 60 * 60 * 1000 < nowMs) return "completed";
+  return "upcoming";
+}
+
 function isToday(iso: string) {
   return isSameMatchDay(iso);
 }
@@ -53,14 +60,16 @@ function adminMatches(matches: PublicMatch[], b: BucketId): PublicMatch[] {
 type Props = {
   matches: PublicMatch[];
   activeMatchId: string | null;
+  nowMs: number;
   onPickMatch: (m: PublicMatch) => void;
 };
 
-export function WorldCupSection({ matches, activeMatchId, onPickMatch }: Props) {
+export function WorldCupSection({ matches, activeMatchId, nowMs, onPickMatch }: Props) {
   const fetchFn = useServerFn(listWorldCupFixtures);
   const [bucket, setBucket] = useState<BucketId>("live");
   const [items, setItems] = useState<WCFixture[]>([]);
   const [loading, setLoading] = useState(true);
+  const [clock, setClock] = useState(nowMs);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,8 +84,13 @@ export function WorldCupSection({ matches, activeMatchId, onPickMatch }: Props) 
     return () => { cancelled = true; clearInterval(t); };
   }, [bucket, fetchFn]);
 
-  const admin = useMemo(() => adminMatches(matches, bucket), [matches, bucket]);
-  const liveAdminCount = useMemo(() => matches.filter((m) => adminBucket(m) === "live").length, [matches]);
+  useEffect(() => {
+    const t = setInterval(() => setClock(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const admin = useMemo(() => adminMatchesAt(matches, bucket, clock), [matches, bucket, clock]);
+  const liveAdminCount = useMemo(() => matches.filter((m) => adminBucketAt(m, clock) === "live").length, [matches, clock]);
 
   return (
     <section aria-label="FIFA World Cup 2026" className="mb-6">
@@ -128,7 +142,7 @@ export function WorldCupSection({ matches, activeMatchId, onPickMatch }: Props) 
             <AdminMatchCard
               key={`a-${m.id}`}
               match={m}
-              status={adminBucket(m)}
+              status={adminBucketAt(m, clock)}
               active={activeMatchId === m.id}
               onClick={() => onPickMatch(m)}
             />
@@ -138,6 +152,24 @@ export function WorldCupSection({ matches, activeMatchId, onPickMatch }: Props) 
       )}
     </section>
   );
+}
+
+function adminMatchesAt(matches: PublicMatch[], b: BucketId, nowMs: number): PublicMatch[] {
+  const list = matches.slice();
+  switch (b) {
+    case "live": return list.filter((m) => adminBucketAt(m, nowMs) === "live");
+    case "today": return list.filter((m) => isToday(m.start_time));
+    case "upcoming":
+      return list.filter((m) => adminBucketAt(m, nowMs) === "upcoming")
+        .sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time));
+    case "recent":
+    case "completed":
+      return list.filter((m) => adminBucketAt(m, nowMs) === "completed")
+        .sort((a, b) => +new Date(b.start_time) - +new Date(a.start_time));
+    case "all":
+    default:
+      return list.sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time));
+  }
 }
 
 function AdminMatchCard({

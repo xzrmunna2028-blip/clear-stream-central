@@ -44,7 +44,7 @@ export const Route = createFileRoute("/")({
     const settings = settingsResult.status === "fulfilled"
       ? settingsResult.value
       : { maintenance_mode: false, maintenance_message: "", marquee_text: "" };
-    return { channels, matches, settings };
+    return { channels, matches, settings, renderedAt: Date.now() };
   },
   component: Home,
 });
@@ -54,7 +54,7 @@ type Mode =
   | { kind: "match"; match: PublicMatch };
 
 function Home() {
-  const { channels: initChannels, matches: initMatches, settings: initSettings } =
+  const { channels: initChannels, matches: initMatches, settings: initSettings, renderedAt } =
     Route.useLoaderData();
   const refetchCh = useServerFn(listChannels);
   const refetchMa = useServerFn(listMatches);
@@ -136,6 +136,7 @@ function Home() {
       <WorldCupSection
         matches={matches}
         activeMatchId={mode?.kind === "match" ? mode.match.id : null}
+        nowMs={renderedAt}
         onPickMatch={pickMatch}
       />
 
