@@ -5,6 +5,7 @@ import logo from "@/assets/logo.png";
 import { Player } from "@/components/Player";
 import { ChannelGrid } from "@/components/ChannelGrid";
 import { WorldCupSection } from "@/components/WorldCupSection";
+import { WorldCupWidgets } from "@/components/WorldCupWidgets";
 import { MatchPlayerView } from "@/components/MatchPlayerView";
 import {
   listChannels,
@@ -115,7 +116,8 @@ function Home() {
 
       <h1 className="sr-only">FlashSports HD — Live Television Streaming</h1>
 
-      <div ref={playerRef} className="mb-4">
+      {/* Top Section — sticky main display */}
+      <div ref={playerRef} className="sticky top-0 z-30 -mx-3 mb-4 bg-[var(--background)]/95 px-3 py-2 backdrop-blur sm:-mx-5 sm:px-5">
         {mode?.kind === "match" ? (
           <MatchPlayerView match={mode.match} marqueeText={marquee} nowMs={renderedAt} onClose={close} />
         ) : mode?.kind === "channel" ? (
@@ -130,9 +132,20 @@ function Home() {
               sources={sources}
             />
           </div>
-        ) : null}
+        ) : (
+          <div className="grid aspect-video place-items-center rounded-2xl border border-dashed border-[var(--border)] bg-black/30 text-center">
+            <div className="p-6">
+              <div className="text-4xl">📺</div>
+              <div className="mt-2 text-base font-semibold">Pick a match or channel below</div>
+              <div className="mt-1 text-xs text-[var(--muted-foreground)]">
+                Instant playback — zero buffering
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* Bottom Section — matches, channels & real-time widgets */}
       <WorldCupSection
         matches={matches}
         activeMatchId={mode?.kind === "match" ? mode.match.id : null}
@@ -145,6 +158,8 @@ function Home() {
         activeId={mode?.kind === "channel" ? mode.channel.id : null}
         onPick={pickChannel}
       />
+
+      <WorldCupWidgets />
 
       <footer className="mt-10 border-t border-[var(--border)] pt-4 text-center text-xs text-[var(--muted-foreground)]">
         © 2026 FlashSports HD · Built for fans
