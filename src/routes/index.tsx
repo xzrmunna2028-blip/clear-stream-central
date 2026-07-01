@@ -5,6 +5,7 @@ import logo from "@/assets/logo.png";
 import { Player } from "@/components/Player";
 import { ChannelGrid } from "@/components/ChannelGrid";
 import { WorldCupSection } from "@/components/WorldCupSection";
+import { WorldCupWidgets } from "@/components/WorldCupWidgets";
 import { MatchPlayerView } from "@/components/MatchPlayerView";
 import {
   listChannels,
